@@ -186,8 +186,7 @@ GMAIL_QUERY=            # optional Gmail search filter, e.g. from:alarms@vendor.
 ```
 
 ## 12. Current Status
-- [ ] Phase 0 — repo, tooling, Docker skeleton (all done except `docker compose up -d db`
-      health check — Docker Desktop can't start: BIOS virtualization off + WSL2 missing)
+- [x] Phase 0 — repo, tooling, Docker skeleton (db healthy on Docker 29.8.2 / WSL2)
 - [x] Phase 1 — Gmail OAuth + sample fetch (token.json saved; 300 samples in samples/subjects.txt)
 - [x] Phase 2 — parser + tests (26 tests, 300/300 samples parse; ALARM_TZ=Africa/Cairo
       confirmed; clearTime = Clear receivedAt; Huawei = store only)
