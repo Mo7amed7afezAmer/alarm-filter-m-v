@@ -127,6 +127,20 @@ Runs for every new message, ordered by `alarmTime` then `receivedAt`.
   `404 historyId too old` fall back to `messages.list` with `after:`.
 - Process at most 200 messages per run; the next minute continues.
 
+**D. Implemented edge-case rules** (`packages/core/src/engine.ts`, decided in Phase 4):
+- Ordering within a batch: `alarmTime`, then alarms before Clears, then `receivedAt`, then
+  `gmailId` — so a Clear delivered before its alarm in the same batch still matches.
+- Clear whose exact `alarmKey`+`alarmTime` alarm exists but is already CLEARED → `stale_clear`,
+  no-op (prevents the "latest active" fallback from closing a newer alarm; duplicate Clears).
+- Alarm arriving when an orphan Clear with the same key + subject time exists → orphan is
+  consumed, alarm created CLEARED/EMAIL with the orphan's clearTime; older actives superseded.
+- Older alarm arriving after a newer ACTIVE one (same key) → created already CLEARED /
+  AUTO_SUPERSEDED at the newer alarm's time (never two ACTIVE alarms per key).
+- `durationMin` = rounded minutes, clamped at ≥ 0.
+- `reprocess(days)`: since = now − days; delete alarms with alarmTime ≥ since, reopen alarms
+  whose clearTime ≥ since, delete orphan clears whose raw message is in the window, then
+  re-run all raw messages received ≥ since. Verified idempotent (memory + real Postgres).
+
 Required test cases (Vitest, in `packages/core`):
 1. Normal alarm → Clear 1 hour later
 2. Alarm → Clear 1 day later
@@ -193,7 +207,8 @@ GMAIL_QUERY=            # optional Gmail search filter, e.g. from:alarms@vendor.
 - [x] Phase 3 — Prisma schema + db container (init migration applied, 13 rules seeded;
       admin user is created on the next `docker compose run --rm migrate` once
       ADMIN_PASSWORD is set in .env)
-- [ ] Phase 4 — matching engine + tests
+- [x] Phase 4 — matching engine + tests (20 engine tests incl. the 7 required + reprocess
+      idempotency; PrismaAlarmRepository verified by integration test on compose db)
 - [ ] Phase 5 — worker container (node-cron)
 - [ ] Phase 6 — Next.js API + auth
 - [ ] Phase 7 — UI pages
@@ -213,6 +228,9 @@ Notes:
   overwritten. New migrations: edit schema, then
   `prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --script`
   (needs a shadow DB) or `prisma migrate dev` against the dev-override db on 127.0.0.1:5432.
+- DB integration test (`packages/db/src/repository.test.ts`) runs only when
+  `TEST_DATABASE_URL` is set (db exposed on 127.0.0.1:5432 via docker-compose.dev.yml); it
+  works inside a rolled-back transaction, so it leaves no rows.
 - Gmail access uses `@googleapis/gmail` + `google-auth-library` (same API as `googleapis`,
   far smaller — keeps the worker image < 200MB). Scope: gmail.readonly.
 - Gmail account: de.alarms@mobi-egypt.com (Workspace). OAuth app is in Testing mode with this

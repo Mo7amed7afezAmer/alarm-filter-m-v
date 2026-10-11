@@ -6,3 +6,6 @@ export const CATEGORIES: readonly Category[] = ["DOWN", "POWER", "OTHER"] as con
 
 export * from "./parser.js";
 export { parseAlarmStamp, zonedToUtc } from "./time.js";
+export * from "./classify.js";
+export * from "./engine.js";
+export { MemoryAlarmRepository } from "./memory-repo.js";
