@@ -71,7 +71,9 @@ S_D_N_BTS O&M LINK FAILURE on #451_S_BH-KOM-AZIZA_0D36DE# at |08-OCT-2026 11:01:
 - **Second format (32% of mail):** `Huawei Alram Notify New alarm: <NE>/<alarm>/<severity>`
   e.g. `...: Hossary-RNC27/UMTS Cell Unavailable/Major`. No time, NE is an RNC/BSC (not a
   site), and no Clear form was seen in the samples. Parsed as `format: "HUAWEI"`,
-  `alarmTime: null`. How the engine treats it is still to be decided.
+  `alarmTime: null`. **Decision (user, 2026-10-11): store in `raw_messages` only — the engine
+  does not create alarms from them** until a Huawei clear format is seen.
+- **ALARM_TZ = `Africa/Cairo`** (confirmed by user 2026-10-11; DST-aware, UTC+3 in summer).
 
 Parser (`packages/core/src/parser.ts`, `parseSubject(subject, { timeZone })`) extracts:
 | Field | Rule |
@@ -80,7 +82,7 @@ Parser (`packages/core/src/parser.ts`, `parseSubject(subject, { timeZone })`) ex
 | `alarmName` | text before ` on #`, minus `CLEARED_` and minus any `;…` suffix (trimmed) |
 | `nameSuffix` | text after `;` in the name, or null |
 | `site` | text between `#` and `#` |
-| `alarmTime` | text between `|` and `|`, format `DD-MON-YYYY HH:mm:ss`, wall-clock in `ALARM_TZ` (default `Africa/Cairo`), stored as UTC. For a Clear this is the original alarm's time |
+| `alarmTime` | text between `|` and `|`, format `DD-MON-YYYY HH:mm:ss`, wall-clock in `ALARM_TZ` (`Africa/Cairo`, confirmed), stored as UTC. For a Clear this is the original alarm's time |
 | `alarmKey` | `${alarmName}||${site}` — **never includes time** |
 
 Unparseable subjects → stored in `raw_messages` with `parse_error`, never dropped.
@@ -104,16 +106,21 @@ Runs for every new message, ordered by `alarmTime` then `receivedAt`.
 3. Else → create new ACTIVE alarm.
 
 **B. Clear message (`isClear = true`)**
-1. Find ACTIVE alarm with same `alarmKey`. If the Clear subject carries a time matching
-   an alarm's `alarmTime`, prefer it; otherwise take the latest active.
-2. Found → `status=CLEARED`, `clearType=EMAIL`, `clearTime=clearMessageTime`,
+1. Find ACTIVE alarm with same `alarmKey`. The Clear subject carries the original alarm's
+   time (confirmed, §5): prefer the alarm whose `alarmTime` equals it; otherwise take the
+   latest active.
+2. Found → `status=CLEARED`, `clearType=EMAIL`, `clearTime = Clear email receivedAt`
+   (Gmail `internalDate` — the subject time is NOT the clear time),
    `durationMin = clearTime - alarmTime`.
 3. Not found → insert into `orphan_clears`. Never silently drop.
 
 **C. Idempotency & safety**
 - Dedupe on `gmailId` in `raw_messages`.
 - Worker: in-process `running` flag + `pg_advisory_xact_lock(42)` per run.
-- Use time from the subject, NOT email received time, for all duration math.
+- `alarmTime` comes from the subject, NOT the email received time. The ONLY exception is
+  `clearTime` of an EMAIL clear, which is the Clear email's `receivedAt` (user decision
+  2026-10-11, because Clear subjects repeat the alarm time).
+- HUAWEI-format messages are stored in `raw_messages` but never create alarms (§5).
 - `reprocess(days)` rebuilds alarms from `raw_messages` deterministically; running it
   twice yields identical results.
 - Gmail sync: `users.history.list` from `SystemStatus.lastHistoryId`; on first run or
@@ -182,8 +189,8 @@ GMAIL_QUERY=            # optional Gmail search filter, e.g. from:alarms@vendor.
 - [ ] Phase 0 — repo, tooling, Docker skeleton (all done except `docker compose up -d db`
       health check — Docker Desktop can't start: BIOS virtualization off + WSL2 missing)
 - [x] Phase 1 — Gmail OAuth + sample fetch (token.json saved; 300 samples in samples/subjects.txt)
-- [ ] Phase 2 — parser + tests (done: parser, 26 tests, 300/300 samples parse; waiting on
-      ALARM_TZ confirmation and the Huawei/clear-time decisions)
+- [x] Phase 2 — parser + tests (26 tests, 300/300 samples parse; ALARM_TZ=Africa/Cairo
+      confirmed; clearTime = Clear receivedAt; Huawei = store only)
 - [ ] Phase 3 — Prisma schema + db container
 - [ ] Phase 4 — matching engine + tests
 - [ ] Phase 5 — worker container (node-cron)
