@@ -18,15 +18,20 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck && tsc -p scripts",
+    "gmail:auth": "tsx scripts/gmail-auth.ts",
+    "gmail:samples": "tsx scripts/fetch-samples.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@googleapis/gmail": "^22.0.1",
     "@types/node": "^20.17.10",
     "eslint": "^9.17.0",
     "eslint-config-prettier": "^9.1.0",
     "globals": "^15.14.0",
+    "google-auth-library": "^11.2.0",
     "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.2",
     "vitest": "^2.1.8"

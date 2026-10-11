@@ -8,6 +8,7 @@ token.json
 # runtime data
 data/
 backups/
+samples/
 
 # build / deps
 node_modules/

@@ -166,7 +166,7 @@ GMAIL_QUERY=            # optional Gmail search filter, e.g. from:alarms@vendor.
 ## 12. Current Status
 - [ ] Phase 0 — repo, tooling, Docker skeleton (all done except `docker compose up -d db`
       health check — Docker Desktop can't start: BIOS virtualization off + WSL2 missing)
-- [ ] Phase 1 — Gmail OAuth + sample fetch
+- [x] Phase 1 — Gmail OAuth + sample fetch (token.json saved; 300 samples in samples/subjects.txt)
 - [ ] Phase 2 — parser + tests
 - [ ] Phase 3 — Prisma schema + db container
 - [ ] Phase 4 — matching engine + tests
@@ -184,3 +184,10 @@ Notes:
   (needs symlink privilege); the Docker (Linux) build always gets standalone.
 - `SystemStatus` model was added to schema.prisma in Phase 0 only because Prisma refuses an
   empty schema; no migrations yet.
+- Gmail access uses `@googleapis/gmail` + `google-auth-library` (same API as `googleapis`,
+  far smaller — keeps the worker image < 200MB). Scope: gmail.readonly.
+- Gmail account: de.alarms@mobi-egypt.com (Workspace). OAuth app is in Testing mode with this
+  account as a test user. Testing-mode refresh tokens expire after 7 days → before Phase 8
+  publish the app (or set User type = Internal) so the worker doesn't lose access weekly.
+- samples/ is gitignored (real network data). 300 msgs = only ~40 min of mail; a second
+  subject format exists ("Huawei Alram Notify New alarm: ...") — handle in Phase 2.
