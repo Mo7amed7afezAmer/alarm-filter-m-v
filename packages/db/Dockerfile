@@ -16,4 +16,5 @@ RUN pnpm --filter @alarm/db exec prisma generate && chown -R node:node /app
 
 USER node
 WORKDIR /app/packages/db
-CMD ["pnpm", "run", "migrate:deploy"]
+# Call the binaries directly: avoids corepack re-downloading pnpm at runtime as the node user.
+CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node_modules/.bin/tsx prisma/seed.ts"]
