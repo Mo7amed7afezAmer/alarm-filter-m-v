@@ -151,6 +151,10 @@ Runs for every new message, ordered by `alarmTime` then `receivedAt`.
 - Clear with `consecNbr` → closes exactly the alarm with that number; already closed →
   `stale_clear`; not found → orphan (stores `consecNbr`). NO "latest active" fallback.
 - Orphan consumption matches by `consecNbr` when present.
+- **No AUTO_SUPERSEDED for alarms with `consecNbr`** (user rule 2026-10-11, case
+  NE3SWS on BH-KANAYES-VLG 22:47:39 #2300397 vs 22:50:40 #1113627011): same name + site at a
+  new time, with or without a cell, is an independent alarm closed ONLY by its own Clear.
+  A.2 superseding applies only to body-less alarms (and never touches alarms with consecNbr).
 
 **D. Implemented edge-case rules** (`packages/core/src/engine.ts`, decided in Phase 4):
 - Ordering within a batch: `alarmTime`, then alarms before Clears, then `receivedAt`, then

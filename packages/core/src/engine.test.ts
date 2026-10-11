@@ -3,6 +3,7 @@ import { MatchingEngine, type AlarmRecord } from "./engine.js";
 import { MemoryAlarmRepository } from "./memory-repo.js";
 import type { RuleRecord } from "./classify.js";
 import { body } from "./__fixtures__/body.js";
+import { parseBody } from "./body.js";
 
 // Fictional sites. Subject times are Africa/Cairo wall-clock (UTC+3 in Oct 2026).
 const RULES: RuleRecord[] = [
@@ -361,6 +362,74 @@ describe("CONSEC_NBR identity (email body)", () => {
       bmail({ cell: null, device: "MRBTS", consec: "101" }, "2026-10-11T18:05:01Z"),
     ]);
     expect(s).toMatchObject({ created: 2, duplicate: 0 });
+  });
+
+  it("same alarm + site at a NEW time, no cell → independent alarms, no supersede (user report)", async () => {
+    // Real case: NE3SWS AGENT … on BH-KANAYES-VLG at 22:47:39 (#2300397) then 22:50:40 (#1113627011).
+    const name = "S_D_N_NE3SWS AGENT NOT RESPONDING TO REQUESTS";
+    const site = "SRAN_LWG_TDD_S_XX-TEST-VLG_3646DE";
+    const m = (t: string, consec: string, clear: boolean, rx: string) => {
+      seq++;
+      return repo.addRaw({
+        gmailId: `g${seq}`,
+        subject: subj(t, { name, site, clear }),
+        body: body({
+          kind: clear ? "CLEARENCE" : "NEW",
+          name: name.slice(6),
+          start: t,
+          site,
+          cell: null,
+          device: "site",
+          consec,
+        }),
+        receivedAt: utc(rx),
+      });
+    };
+    const s = await engine.processBatch([
+      m("11-OCT-2026 22:47:39", "2300397", false, "2026-10-11T19:48:00Z"),
+      m("11-OCT-2026 22:50:40", "1113627011", false, "2026-10-11T19:51:00Z"),
+    ]);
+    expect(s).toMatchObject({ created: 2, superseded: 0 });
+    expect(repo.alarms.every((a) => a.status === "ACTIVE")).toBe(true);
+
+    // Each one is closed only by its own Clear.
+    await engine.processBatch([
+      m("11-OCT-2026 22:50:40", "1113627011", true, "2026-10-11T20:25:08Z"),
+    ]);
+    const by = (c: string) => repo.alarms.find((a) => a.consecNbr === c)!;
+    expect(by("1113627011")).toMatchObject({
+      status: "CLEARED",
+      clearType: "EMAIL",
+      durationMin: 34,
+    });
+    expect(by("2300397").status).toBe("ACTIVE");
+  });
+
+  it("an older alarm arriving late (with CONSEC_NBR) is created ACTIVE, not superseded", async () => {
+    await engine.processBatch([
+      bmail({ cell: null, device: "site", consec: "200" }, "2026-10-11T18:10:00Z"),
+    ]);
+    seq++;
+    const s = await engine.processBatch([
+      repo.addRaw({
+        gmailId: `g${seq}`,
+        subject: subj("11-OCT-2026 20:00:00", { name: WCDMA, site: S }),
+        body: body({
+          start: "11-OCT-2026 20:00:00",
+          site: S,
+          cell: null,
+          device: "site",
+          consec: "199",
+        }),
+        receivedAt: utc("2026-10-11T18:11:00Z"),
+      }),
+    ]);
+    expect(s).toMatchObject({ created: 1, created_superseded: 0 });
+  });
+
+  it("an empty NE_name line does not swallow the next label", () => {
+    const b = body({ cell: null, device: "site" }).replace("\t\tRNC66\r\n", "\r\n");
+    expect(parseBody(b)).toMatchObject({ neName: null, alarmNumber: "7771", consecNbr: "2291814" });
   });
 
   it("the same email twice (same CONSEC_NBR) is a duplicate", async () => {

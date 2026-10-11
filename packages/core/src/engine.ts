@@ -192,7 +192,11 @@ export class MatchingEngine {
       device: v.device,
     };
 
-    const active = await this.repo.findActiveAlarms(v.alarmKey);
+    // With CONSEC_NBR every alarm is independent (user rule 2026-10-11): same name + site at a
+    // new time is a NEW alarm that only its own Clear closes — no AUTO_SUPERSEDED either way.
+    const active = v.consecNbr
+      ? []
+      : (await this.repo.findActiveAlarms(v.alarmKey)).filter((a) => !a.consecNbr);
     const older = active.filter((a) => a.alarmTime < v.alarmTime);
     const newer = active.filter((a) => a.alarmTime > v.alarmTime);
 
