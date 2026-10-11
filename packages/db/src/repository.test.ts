@@ -1,7 +1,8 @@
 // Integration test: engine + PrismaAlarmRepository against a real Postgres.
 // Runs only when TEST_DATABASE_URL is set; everything happens in a transaction that is rolled back.
 //   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db
-//   TEST_DATABASE_URL=postgresql://alarm:<pw>@127.0.0.1:5432/alarms corepack pnpm test
+//   TEST_DATABASE_URL=postgresql://alarm:<pw>@127.0.0.1:5432/alarms_test corepack pnpm test
+// Use the separate alarms_test DB: reprocess() inside the test spans every row in its window.
 import { describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { MatchingEngine } from "@alarm/core";
@@ -20,6 +21,8 @@ describe.skipIf(!url)("PrismaAlarmRepository (integration)", () => {
     try {
       await prisma.$transaction(
         async (tx) => {
+          // Use a dedicated test DB (alarms_test) — the rule below is rolled back with the rest.
+          await tx.rule.create({ data: { pattern: "LINK FAILURE", category: "DOWN", priority: 1 } });
           const raw = await Promise.all(
             [
               [subj("11-OCT-2026 10:00:00"), "2026-10-11T07:01:00Z"],

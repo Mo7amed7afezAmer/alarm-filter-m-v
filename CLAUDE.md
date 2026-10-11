@@ -211,7 +211,8 @@ GMAIL_QUERY=            # optional Gmail search filter, e.g. from:alarms@vendor.
       idempotency; PrismaAlarmRepository verified by integration test on compose db)
 - [x] Phase 5 — worker container (node-cron; healthy, ~200 msgs/min backfilling 24h; image
       144MB on disk — `docker images` shows ~242MB because it counts the base image's npm layer)
-- [ ] Phase 6 — Next.js API + auth
+- [x] Phase 6 — Next.js API + auth (all §9 routes, zod, NextAuth JWT roles, exceljs;
+      7 integration tests on alarms_test; login page at /login)
 - [ ] Phase 7 — UI pages
 - [ ] Phase 8 — full compose, backups, LAN access, 24h parallel run, RUNBOOK
 Notes:
@@ -229,9 +230,21 @@ Notes:
   overwritten. New migrations: edit schema, then
   `prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --script`
   (needs a shadow DB) or `prisma migrate dev` against the dev-override db on 127.0.0.1:5432.
-- DB integration test (`packages/db/src/repository.test.ts`) runs only when
-  `TEST_DATABASE_URL` is set (db exposed on 127.0.0.1:5432 via docker-compose.dev.yml); it
-  works inside a rolled-back transaction, so it leaves no rows.
+- Integration tests (`packages/db/src/repository.test.ts`, `apps/web/app/api/api.integration.test.ts`)
+  run only when `TEST_DATABASE_URL` is set and must point at the separate **`alarms_test`**
+  database (created + migrated in Phase 6), never at `alarms`.
+- Local dev: ALWAYS start compose with both files
+  (`docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d ...`). Plain
+  `docker compose up` recreates db without the 127.0.0.1:5432 port and `pnpm dev` loses the DB.
+  `apps/web/.env.local` (gitignored, generated from `.env`) points the dev server at it.
+- API: every route except `/api/health` and `/api/auth/*` requires a session (401 JSON);
+  `/api/rules` and `/api/reprocess` require ADMIN (403). Pages are guarded by `middleware.ts`
+  (redirect to /login). `PUT /api/rules` replaces all rules and re-classifies existing alarms.
+  MTTR = avg durationMin of EMAIL clears only (AUTO_SUPERSEDED excluded), last 30 days.
+  `/api/health` is 200 whenever the DB answers (worker staleness reported in the body).
+- Classification gap seen on real data: OTHER dominates because seed rules don't match
+  `BCCH MISSING`, `WCDMA BASE STATION OUT OF USE`, `NE3SWS AGENT NOT RESPONDING…` — ask the
+  user whether these should be DOWN (editable in /settings once Phase 7 is done).
 - Worker (`apps/worker`): mounts BOTH token.json and credentials.json read-only (refreshing
   the access token needs the client secret). Sync never advances `lastHistoryId` until every
   discovered message is stored, so the 200/run cap can't lose mail. First run / expired
