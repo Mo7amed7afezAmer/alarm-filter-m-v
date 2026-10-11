@@ -190,7 +190,9 @@ GMAIL_QUERY=            # optional Gmail search filter, e.g. from:alarms@vendor.
 - [x] Phase 1 — Gmail OAuth + sample fetch (token.json saved; 300 samples in samples/subjects.txt)
 - [x] Phase 2 — parser + tests (26 tests, 300/300 samples parse; ALARM_TZ=Africa/Cairo
       confirmed; clearTime = Clear receivedAt; Huawei = store only)
-- [ ] Phase 3 — Prisma schema + db container
+- [x] Phase 3 — Prisma schema + db container (init migration applied, 13 rules seeded;
+      admin user is created on the next `docker compose run --rm migrate` once
+      ADMIN_PASSWORD is set in .env)
 - [ ] Phase 4 — matching engine + tests
 - [ ] Phase 5 — worker container (node-cron)
 - [ ] Phase 6 — Next.js API + auth
@@ -204,8 +206,13 @@ Notes:
   April 2026 — decide before Phase 5 whether to move images to `node:22-alpine`/`node:24-alpine`.
 - `next.config.mjs` emits `output: 'standalone'` everywhere except native Windows builds
   (needs symlink privilege); the Docker (Linux) build always gets standalone.
-- `SystemStatus` model was added to schema.prisma in Phase 0 only because Prisma refuses an
-  empty schema; no migrations yet.
+- DB tables are snake_case (`raw_messages`, `alarms`, `orphan_clears`, `rules`, `sites`,
+  `users`, `system_status`). Extra indexes beyond §8: raw_messages.receivedAt (reprocess),
+  orphan_clears.alarmKey, rules.priority. Rule priority: lower number = checked first.
+- Seed is idempotent: rules only inserted when the table is empty; admin created once, never
+  overwritten. New migrations: edit schema, then
+  `prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --script`
+  (needs a shadow DB) or `prisma migrate dev` against the dev-override db on 127.0.0.1:5432.
 - Gmail access uses `@googleapis/gmail` + `google-auth-library` (same API as `googleapis`,
   far smaller — keeps the worker image < 200MB). Scope: gmail.readonly.
 - Gmail account: de.alarms@mobi-egypt.com (Workspace). OAuth app is in Testing mode with this
