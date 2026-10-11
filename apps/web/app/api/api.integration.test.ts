@@ -84,7 +84,10 @@ describe.skipIf(!url)("API integration", () => {
       const { status, body } = await get(activeGET, `/api/alarms/active?site=${PREFIX}`);
       expect(status).toBe(200);
       expect(body).toMatchObject({ total: 2, page: 1, pageSize: 50, pages: 1 });
-      expect(body.items.map((a: { site: string }) => a.site)).toEqual([`${PREFIX}-B`, `${PREFIX}-A`]);
+      expect(body.items.map((a: { site: string }) => a.site)).toEqual([
+        `${PREFIX}-B`,
+        `${PREFIX}-A`,
+      ]);
       expect(body.items[0]).toMatchObject({ category: "POWER", status: "ACTIVE", region: null });
     });
 
