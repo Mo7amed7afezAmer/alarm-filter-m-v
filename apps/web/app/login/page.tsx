@@ -22,7 +22,8 @@ function LoginForm() {
     });
     setBusy(false);
     if (r?.ok) window.location.href = callbackUrl;
-    else setError("Wrong email or password");
+    else if (!r || r.error === "CredentialsSignin") setError("Wrong email or password");
+    else setError("Sign-in failed: server error (is the database running?)");
   }
 
   return (
