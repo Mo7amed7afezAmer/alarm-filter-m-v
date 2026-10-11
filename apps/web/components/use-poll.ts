@@ -7,7 +7,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export function usePoll<T>(url: string | null, intervalMs = 60_000) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Start "loading" so the first render shows a spinner, not the empty state.
+  const [loading, setLoading] = useState(url !== null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const seq = useRef(0);
 

@@ -2,6 +2,7 @@
 
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
+import { RadioTower } from "lucide-react";
 import { Suspense, useState, type FormEvent } from "react";
 
 function LoginForm() {
@@ -27,33 +28,44 @@ function LoginForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4 rounded-lg border bg-card p-6">
-      <h1 className="text-xl font-semibold">Alarm Filter</h1>
+    <form
+      onSubmit={onSubmit}
+      className="w-full max-w-sm space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+    >
+      <div className="flex items-center gap-3 pb-2">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white">
+          <RadioTower className="h-5 w-5" />
+        </span>
+        <div>
+          <h1 className="text-lg font-semibold leading-tight">Alarm Filter</h1>
+          <p className="text-sm text-slate-500">Sign in to continue</p>
+        </div>
+      </div>
       <label className="block space-y-1 text-sm">
-        <span>Email</span>
+        <span className="font-medium text-slate-700">Email</span>
         <input
           name="email"
           type="email"
           required
           autoComplete="username"
-          className="w-full rounded-md border bg-background px-3 py-2"
+          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
         />
       </label>
       <label className="block space-y-1 text-sm">
-        <span>Password</span>
+        <span className="font-medium text-slate-700">Password</span>
         <input
           name="password"
           type="password"
           required
           autoComplete="current-password"
-          className="w-full rounded-md border bg-background px-3 py-2"
+          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
         />
       </label>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <button
         type="submit"
         disabled={busy}
-        className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+        className="w-full rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
       >
         {busy ? "Signing in…" : "Sign in"}
       </button>

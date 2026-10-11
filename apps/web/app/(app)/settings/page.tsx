@@ -5,6 +5,7 @@ import { useAppConfig } from "@/components/app-config";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/page-header";
 import { usePoll } from "@/components/use-poll";
 
 type Category = "DOWN" | "POWER" | "OTHER";
@@ -67,7 +68,7 @@ function RulesEditor() {
 
   const sorted = rules.map((r, i) => ({ r, i })).sort((a, b) => a.r.priority - b.r.priority);
   return (
-    <Card>
+    <Card className="rounded-xl border-slate-200 shadow-sm">
       <CardHeader>
         <CardTitle className="text-base">Classification rules</CardTitle>
         <p className="text-sm text-muted-foreground">
@@ -76,14 +77,17 @@ function RulesEditor() {
         </p>
       </CardHeader>
       <CardContent className="space-y-2">
-        <div className="grid grid-cols-[1fr_8rem_6rem_2.5rem] gap-2 text-xs font-medium text-muted-foreground">
+        <div className="hidden grid-cols-[1fr_8rem_6rem_2.5rem] gap-2 text-xs font-medium text-muted-foreground sm:grid">
           <span>Pattern</span>
           <span>Category</span>
           <span>Priority</span>
           <span />
         </div>
         {sorted.map(({ r, i }) => (
-          <div key={i} className="grid grid-cols-[1fr_8rem_6rem_2.5rem] gap-2">
+          <div
+            key={i}
+            className="grid grid-cols-[1fr_1fr_2.5rem] gap-2 rounded-lg border border-slate-100 p-2 sm:grid-cols-[1fr_8rem_6rem_2.5rem] sm:rounded-none sm:border-0 sm:p-0 [&>*:first-child]:col-span-3 sm:[&>*:first-child]:col-span-1"
+          >
             <Input value={r.pattern} onChange={(e) => update(i, { pattern: e.target.value })} />
             <select
               className="h-9 rounded-md border bg-background px-2 text-sm"
@@ -152,7 +156,7 @@ function Reprocess() {
     }
   }
   return (
-    <Card>
+    <Card className="rounded-xl border-slate-200 shadow-sm">
       <CardHeader>
         <CardTitle className="text-base">Reprocess</CardTitle>
         <p className="text-sm text-muted-foreground">
@@ -197,7 +201,7 @@ function Users() {
   }
 
   return (
-    <Card>
+    <Card className="rounded-xl border-slate-200 shadow-sm">
       <CardHeader>
         <CardTitle className="text-base">Users</CardTitle>
         <p className="text-sm text-muted-foreground">
@@ -205,73 +209,75 @@ function Users() {
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs text-muted-foreground">
-            <tr>
-              <th className="py-1">Email</th>
-              <th>Role</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {(data?.users ?? []).map((u) => (
-              <tr key={u.id} className="border-t">
-                <td className="py-2">{u.email}</td>
-                <td>
-                  <select
-                    className="h-8 rounded-md border bg-background px-2"
-                    value={u.role}
-                    disabled={u.email === me}
-                    onChange={(e) =>
-                      void run(
-                        () => send("/api/users", "PATCH", { id: u.id, role: e.target.value }),
-                        `Updated ${u.email}`,
-                      )
-                    }
-                  >
-                    <option value="VIEWER">viewer</option>
-                    <option value="ADMIN">admin</option>
-                  </select>
-                </td>
-                <td className="space-x-1 text-right">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      const pw = window.prompt(`New password for ${u.email} (min 8 characters)`);
-                      if (pw)
+        <div className="-mx-1 overflow-x-auto">
+          <table className="w-full min-w-[28rem] text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="py-1">Email</th>
+                <th>Role</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {(data?.users ?? []).map((u) => (
+                <tr key={u.id} className="border-t">
+                  <td className="py-2">{u.email}</td>
+                  <td>
+                    <select
+                      className="h-8 rounded-md border bg-background px-2"
+                      value={u.role}
+                      disabled={u.email === me}
+                      onChange={(e) =>
                         void run(
-                          () => send("/api/users", "PATCH", { id: u.id, password: pw }),
-                          `Password reset for ${u.email}`,
-                        );
-                    }}
-                  >
-                    Reset password
-                  </Button>
-                  {u.email !== me && (
+                          () => send("/api/users", "PATCH", { id: u.id, role: e.target.value }),
+                          `Updated ${u.email}`,
+                        )
+                      }
+                    >
+                      <option value="VIEWER">viewer</option>
+                      <option value="ADMIN">admin</option>
+                    </select>
+                  </td>
+                  <td className="space-x-1 text-right">
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-red-600"
                       onClick={() => {
-                        if (window.confirm(`Delete ${u.email}?`))
+                        const pw = window.prompt(`New password for ${u.email} (min 8 characters)`);
+                        if (pw)
                           void run(
-                            () => send(`/api/users?id=${u.id}`, "DELETE"),
-                            `Deleted ${u.email}`,
+                            () => send("/api/users", "PATCH", { id: u.id, password: pw }),
+                            `Password reset for ${u.email}`,
                           );
                       }}
                     >
-                      Delete
+                      Reset password
                     </Button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    {u.email !== me && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600"
+                        onClick={() => {
+                          if (window.confirm(`Delete ${u.email}?`))
+                            void run(
+                              () => send(`/api/users?id=${u.id}`, "DELETE"),
+                              `Deleted ${u.email}`,
+                            );
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         <form
-          className="flex flex-wrap items-end gap-2 border-t pt-3"
+          className="grid grid-cols-1 gap-2 border-t pt-3 sm:flex sm:flex-wrap sm:items-end"
           onSubmit={(e) => {
             e.preventDefault();
             void run(async () => {
@@ -281,7 +287,7 @@ function Users() {
           }}
         >
           <Input
-            className="w-56"
+            className="w-full sm:w-56"
             type="email"
             required
             placeholder="email"
@@ -289,7 +295,7 @@ function Users() {
             onChange={(e) => setForm({ ...form, email: e.target.value })}
           />
           <Input
-            className="w-48"
+            className="w-full sm:w-48"
             type="password"
             required
             minLength={8}
@@ -322,8 +328,11 @@ export default function SettingsPage() {
     return <p className="text-sm text-muted-foreground">Settings are available to admins only.</p>;
   return (
     <>
-      <h1 className="text-xl font-semibold">Settings</h1>
-      <div className="grid gap-4 xl:grid-cols-2">
+      <PageHeader
+        title="Settings"
+        subtitle="Classification rules, reprocessing and users (admin only)"
+      />
+      <div className="grid gap-4 xl:grid-cols-2 [&>*]:min-w-0">
         <RulesEditor />
         <div className="space-y-4">
           <Reprocess />

@@ -34,6 +34,19 @@ export function dateInputValue(d: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone }).format(d);
 }
 
+/** "S_D_N_BTS O&M LINK FAILURE" → { prefix: "S_D_N", name: "BTS O&M LINK FAILURE" }. */
+export function splitAlarmName(alarmName: string): { prefix: string | null; name: string } {
+  const m = /^((?:[A-Z]_){1,3})(.+)$/.exec(alarmName);
+  return m ? { prefix: m[1]!.slice(0, -1), name: m[2]! } : { prefix: null, name: alarmName };
+}
+
+/** Coloured left stripe per category (used by table rows and mobile cards). */
+export const CATEGORY_STRIPE: Record<string, string> = {
+  DOWN: "border-l-red-500",
+  POWER: "border-l-amber-500",
+  OTHER: "border-l-slate-300",
+};
+
 export const CATEGORY_STYLES: Record<string, string> = {
   DOWN: "bg-red-100 text-red-800 border-red-200",
   POWER: "bg-amber-100 text-amber-800 border-amber-200",

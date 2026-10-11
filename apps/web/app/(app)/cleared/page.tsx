@@ -2,15 +2,18 @@
 
 import { zonedToUtc } from "@alarm/core";
 import type { ColumnDef } from "@tanstack/react-table";
+import { Download } from "lucide-react";
 import { Suspense, useMemo } from "react";
+import { AlarmCard, AlarmName, Mono } from "@/components/alarm-bits";
 import { useAppConfig } from "@/components/app-config";
 import { CategoryBadge, ClearTypeBadge } from "@/components/badges";
 import { DataTable, Pager } from "@/components/data-table";
 import { CategoryFilter, Field, FilterBar, TextFilter, useUrlFilters } from "@/components/filters";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePoll } from "@/components/use-poll";
-import { dateInputValue, formatDateTime, formatMinutes } from "@/lib/format";
+import { CATEGORY_STRIPE, dateInputValue, formatDateTime, formatMinutes } from "@/lib/format";
 
 interface ClearedAlarm {
   id: number;
@@ -40,6 +43,10 @@ function dayBoundIso(day: string, timeZone: string, end: boolean): string {
     ? zonedToUtc(y, m, d, 23, 59, 59, timeZone)
     : zonedToUtc(y, m, d, 0, 0, 0, timeZone);
   return new Date(t.getTime() + (end ? 999 : 0)).toISOString();
+}
+
+function Duration({ min }: { min: number | null }) {
+  return <span className="font-medium tabular-nums text-slate-800">{formatMinutes(min)}</span>;
 }
 
 function ClearedView() {
@@ -74,34 +81,38 @@ function ClearedView() {
         header: "Category",
         cell: (c) => <CategoryBadge value={c.getValue() as string} />,
       },
-      { accessorKey: "alarmName", header: "Alarm" },
       {
-        accessorKey: "site",
-        header: "Site",
-        cell: (c) => <span className="font-mono text-xs">{c.getValue() as string}</span>,
+        accessorKey: "alarmName",
+        header: "Alarm",
+        cell: (c) => (
+          <AlarmName value={c.getValue() as string} className="max-w-[14rem] 2xl:max-w-[22rem]" />
+        ),
       },
+      { accessorKey: "site", header: "Site", cell: (c) => <Mono>{c.getValue() as string}</Mono> },
       {
         id: "cell",
         header: "Cell / device",
         accessorFn: (r) => r.cellName ?? r.device ?? "",
-        cell: (c) => <span className="font-mono text-xs">{(c.getValue() as string) || "—"}</span>,
+        cell: (c) => <Mono className="text-slate-500">{(c.getValue() as string) || "—"}</Mono>,
       },
       {
         accessorKey: "alarmTime",
         header: "Raised",
-        cell: (c) => formatDateTime(c.getValue() as string, timeZone),
+        cell: (c) => (
+          <span className="text-slate-600">{formatDateTime(c.getValue() as string, timeZone)}</span>
+        ),
       },
       {
         accessorKey: "clearTime",
         header: "Cleared",
-        cell: (c) => formatDateTime(c.getValue() as string, timeZone),
+        cell: (c) => (
+          <span className="text-slate-600">{formatDateTime(c.getValue() as string, timeZone)}</span>
+        ),
       },
       {
         accessorKey: "durationMin",
         header: "Duration",
-        cell: (c) => (
-          <span className="tabular-nums">{formatMinutes(c.getValue() as number | null)}</span>
-        ),
+        cell: (c) => <Duration min={c.getValue() as number | null} />,
       },
       {
         accessorKey: "clearType",
@@ -117,38 +128,44 @@ function ClearedView() {
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">
-          Cleared alarms{" "}
-          {data && (
-            <span className="text-muted-foreground">({data.total.toLocaleString("en-US")})</span>
-          )}
-        </h1>
-        <Button size="sm" variant="outline" asChild>
-          <a href={`/api/export?${exportQuery}`}>Export .xlsx</a>
-        </Button>
-      </div>
+      <PageHeader
+        title="Cleared alarms"
+        count={data?.total}
+        subtitle={`By clear time · ${timeZone} days`}
+        actions={
+          <Button size="sm" variant="outline" className="bg-white" asChild>
+            <a href={`/api/export?${exportQuery}`}>
+              <Download className="h-4 w-4" />
+              Export
+            </a>
+          </Button>
+        }
+      />
 
-      <FilterBar>
-        <Field label="From">
-          <Input
-            type="date"
-            className="w-40"
-            value={from}
-            max={to}
-            onChange={(e) => set({ from: e.target.value || null })}
-          />
-        </Field>
-        <Field label="To">
-          <Input
-            type="date"
-            className="w-40"
-            value={to}
-            min={from}
-            max={today}
-            onChange={(e) => set({ to: e.target.value || null })}
-          />
-        </Field>
+      <FilterBar
+        active={[category, site, params.get("from"), params.get("to")].filter(Boolean).length}
+      >
+        <div className="grid grid-cols-2 gap-3 sm:contents">
+          <Field label="From">
+            <Input
+              type="date"
+              className="w-full bg-white sm:w-40"
+              value={from}
+              max={to}
+              onChange={(e) => set({ from: e.target.value || null })}
+            />
+          </Field>
+          <Field label="To">
+            <Input
+              type="date"
+              className="w-full bg-white sm:w-40"
+              value={to}
+              min={from}
+              max={today}
+              onChange={(e) => set({ to: e.target.value || null })}
+            />
+          </Field>
+        </div>
         <CategoryFilter value={category} onChange={(v) => set({ category: v })} />
         <TextFilter
           label="Site"
@@ -156,16 +173,39 @@ function ClearedView() {
           placeholder="e.g. SK-ADLIYA"
           onChange={(v) => set({ site: v })}
         />
-        <span className="ml-auto text-xs text-muted-foreground">
-          By clear time, {timeZone} days
-        </span>
       </FilterBar>
 
-      {error && <p className="text-sm text-red-600">Could not load: {error}</p>}
+      {error && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          Could not load: {error}
+        </p>
+      )}
       <DataTable
         columns={columns}
         data={data?.items ?? []}
-        empty={loading && !data ? "Loading…" : "No cleared alarms in this range"}
+        getRowId={(r) => String(r.id)}
+        loading={loading && !data}
+        empty="No cleared alarms in this range"
+        rowClassName={(r) => CATEGORY_STRIPE[r.category]}
+        renderCard={(r) => (
+          <AlarmCard
+            alarmName={r.alarmName}
+            category={r.category}
+            site={r.site}
+            cell={r.cellName ?? r.device}
+            meta={
+              <span>
+                {formatDateTime(r.alarmTime, timeZone)} → {formatDateTime(r.clearTime, timeZone)}
+              </span>
+            }
+            right={
+              <span className="flex items-center gap-2">
+                <Duration min={r.durationMin} />
+                <ClearTypeBadge value={r.clearType} />
+              </span>
+            }
+          />
+        )}
       />
       {data && (
         <Pager

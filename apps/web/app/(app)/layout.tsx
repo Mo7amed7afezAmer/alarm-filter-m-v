@@ -19,7 +19,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <AppConfigProvider value={config}>
       <Nav />
-      <main className="mx-auto max-w-screen-2xl space-y-4 px-4 py-4">{children}</main>
+      <main className="mx-auto max-w-screen-2xl space-y-5 px-4 py-5 sm:px-6 sm:py-6">
+        {children}
+      </main>
     </AppConfigProvider>
   );
 }
