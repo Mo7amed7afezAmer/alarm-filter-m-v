@@ -30,6 +30,7 @@ export class MemoryAlarmRepository implements AlarmRepository {
       gmailId: msg.gmailId,
       subject: msg.subject,
       receivedAt: msg.receivedAt,
+      body: msg.body ?? null,
       parseError: null,
       processed: false,
     };
@@ -48,6 +49,11 @@ export class MemoryAlarmRepository implements AlarmRepository {
     return a ? { ...a } : null;
   }
 
+  async findAlarmByConsec(consecNbr: string) {
+    const a = this.alarms.find((x) => x.consecNbr === consecNbr);
+    return a ? { ...a } : null;
+  }
+
   async findActiveAlarms(alarmKey: string) {
     return this.alarms
       .filter((x) => x.alarmKey === alarmKey && x.status === "ACTIVE")
@@ -55,10 +61,9 @@ export class MemoryAlarmRepository implements AlarmRepository {
   }
 
   async createAlarm(alarm: NewAlarm) {
-    if (
-      this.alarms.some((x) => x.alarmKey === alarm.alarmKey && +x.alarmTime === +alarm.alarmTime)
-    ) {
-      throw new Error("unique violation (alarmKey, alarmTime)");
+    // Mirrors the DB: consecNbr is unique when present.
+    if (alarm.consecNbr && this.alarms.some((x) => x.consecNbr === alarm.consecNbr)) {
+      throw new Error("unique violation (consecNbr)");
     }
     const rec = { ...alarm, id: this.nextAlarmId++ };
     this.alarms.push(rec);
@@ -105,6 +110,12 @@ export class MemoryAlarmRepository implements AlarmRepository {
   async rawMessagesSince(since: Date) {
     return this.raw
       .filter((r) => r.receivedAt >= since)
-      .map(({ id, gmailId, subject, receivedAt }) => ({ id, gmailId, subject, receivedAt }));
+      .map(({ id, gmailId, subject, receivedAt, body }) => ({
+        id,
+        gmailId,
+        subject,
+        receivedAt,
+        body,
+      }));
   }
 }

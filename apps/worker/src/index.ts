@@ -9,7 +9,9 @@ import { recordError, runOnce } from "./run.js";
 const log = (msg: string) => console.log(`${new Date().toISOString()} [worker] ${msg}`);
 
 const prisma = new PrismaClient();
-const source = createGmailSource(config.credentialsPath, config.tokenPath);
+const source = createGmailSource(config.credentialsPath, config.tokenPath, {
+  labels: config.gmailLabels,
+});
 const state: HealthState = { startedAt: new Date(), running: false };
 
 async function tick() {
@@ -46,7 +48,7 @@ async function tick() {
 const server = startHealthServer(prisma, state, config.healthPort, config.staleAfterSec);
 const task = cron.schedule(config.cron, () => void tick());
 log(
-  `started: cron="${config.cron}" tz=${config.alarmTz} max/run=${config.maxPerRun} health=:${config.healthPort}`,
+  `started: cron="${config.cron}" tz=${config.alarmTz} labels=${config.gmailLabels.join(",") || "(all mail)"} max/run=${config.maxPerRun} health=:${config.healthPort}`,
 );
 void tick();
 

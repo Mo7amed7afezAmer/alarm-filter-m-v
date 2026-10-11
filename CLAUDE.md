@@ -85,6 +85,24 @@ Parser (`packages/core/src/parser.ts`, `parseSubject(subject, { timeZone })`) ex
 | `alarmTime` | text between `|` and `|`, format `DD-MON-YYYY HH:mm:ss`, wall-clock in `ALARM_TZ` (`Africa/Cairo`, confirmed), stored as UTC. For a Clear this is the original alarm's time |
 | `alarmKey` | `${alarmName}||${site}` — **never includes time** |
 
+**Email body (confirmed from 200 real bodies, label `dn-kafr-eldawar`, 2026-10-11)** —
+`packages/core/src/body.ts`, `parseMessage(subject, body)`:
+```
+############NEW ALARM###########          (Clear: ############CLEARENCE ALARM###########)
+ALARM NAME:        WCDMA CELL OUT OF USE   (each value is on the line after its label)
+ALARM_START_TIME:  11-OCT-2026 21:02:49    (= subject time)
+NE_name: RNC66 · Alarm_Number 7771 · ALARM_SITE: U_S_BH-MHLT-KYL_3830DE
+cell name :        A_BH-MHLT-KYL_3_24313_S (only when ALARM_Device = cell)
+ALARM_Device:      cell | MRBTS | site
+CONSEC_NBR:        2291814
+```
+- **`CONSEC_NBR` is unique per alarm and the Clear carries the SAME number** (89/89 unique,
+  79/79 clears matched). User rule (2026-10-11): the same subject (name + time) arriving
+  again with a different body = a NEW alarm (e.g. another cell) — never a duplicate.
+- With a body: `alarmKey = name||site||cellName` (cell only when present) and identity =
+  `consecNbr`. Without a parseable body: subject rules only (key = name||site).
+- Non-alarm mail in the label (e.g. "Nokia … Alarms Update Report") → parse_error, kept.
+
 Unparseable subjects → stored in `raw_messages` with `parse_error`, never dropped.
 `corepack pnpm parse:samples` runs the parser over all samples and lists failures.
 
@@ -127,6 +145,13 @@ Runs for every new message, ordered by `alarmTime` then `receivedAt`.
   `404 historyId too old` fall back to `messages.list` with `after:`.
 - Process at most 200 messages per run; the next minute continues.
 
+**E. CONSEC_NBR identity (added 2026-10-11, overrides A.1 / B.1 when the body has it):**
+- Alarm with a `consecNbr` already stored → duplicate; otherwise it is a new alarm even if
+  another alarm has the same subject/key-without-cell/time.
+- Clear with `consecNbr` → closes exactly the alarm with that number; already closed →
+  `stale_clear`; not found → orphan (stores `consecNbr`). NO "latest active" fallback.
+- Orphan consumption matches by `consecNbr` when present.
+
 **D. Implemented edge-case rules** (`packages/core/src/engine.ts`, decided in Phase 4):
 - Ordering within a batch: `alarmTime`, then alarms before Clears, then `receivedAt`, then
   `gmailId` — so a Clear delivered before its alarm in the same batch still matches.
@@ -152,12 +177,13 @@ Required test cases (Vitest, in `packages/core`):
 
 ## 8. Database Schema (Prisma)
 ```
-RawMessage   id, gmailId @unique, subject, receivedAt, parseError?, processedAt?
+RawMessage   id, gmailId @unique, subject, receivedAt, body?, parseError?, processedAt?
 Alarm        id, alarmKey, alarmName, site, category(DOWN|POWER|OTHER),
              alarmTime, status(ACTIVE|CLEARED), clearTime?, durationMin?,
-             clearType?(EMAIL|AUTO_SUPERSEDED), createdAt
-             @@unique([alarmKey, alarmTime]) @@index([status, category]) @@index([site])
-OrphanClear  id, alarmKey, subject, clearTime, rawMessageId
+             clearType?(EMAIL|AUTO_SUPERSEDED), consecNbr? @unique, cellName?, device?, createdAt
+             @@index([alarmKey, alarmTime]) @@index([status, category]) @@index([site])
+             (alarmKey+alarmTime was @@unique until 2026-10-11 — two cells can share it)
+OrphanClear  id, alarmKey, subject, clearTime, rawMessageId, consecNbr?
 Rule         id, pattern, category, priority
 Site         site @id, region?, owner?
 User         id, email @unique, passwordHash, role(VIEWER|ADMIN)
@@ -197,6 +223,7 @@ ADMIN_PASSWORD=
 ALARM_TZ=Africa/Cairo
 ALERT_HOURS=4
 GMAIL_QUERY=            # optional Gmail search filter, e.g. from:alarms@vendor.com
+GMAIL_LABELS=dn-kafr-eldawar   # comma-separated labels the worker reads (search form); empty = all mail
 ```
 
 ## 12. Current Status
@@ -251,6 +278,12 @@ Notes:
   history → messages.list for the last `INITIAL_BACKFILL_HOURS` (24). `GMAIL_QUERY` only
   applies to that fallback listing (history.list has no query). /health is 503 only when
   runs stop (> 5 min); a Gmail error shows in `lastError` but stays 200 to avoid restart loops.
+- 2026-10-11 body/label change: worker fetches `format: full`, stores the plain-text body in
+  `raw_messages.body`, and reads only `GMAIL_LABELS` (history.list per labelId +
+  messages.list `(label:a OR label:b)`). User approved wiping raw_messages/alarms/orphan_clears
+  (9,188 / 2,516 rows) and re-syncing; rules + users kept. More labels: user to send names.
+- On Windows, `prisma generate` fails with EPERM while `next dev` holds the query-engine DLL —
+  stop the dev server first.
 - Gmail access uses `@googleapis/gmail` + `google-auth-library` (same API as `googleapis`,
   far smaller — keeps the worker image < 200MB). Scope: gmail.readonly.
 - Gmail account: de.alarms@mobi-egypt.com (Workspace). OAuth app is in Testing mode with this

@@ -11,6 +11,11 @@ function int(name: string, fallback: number): number {
 export const config = {
   alarmTz: process.env.ALARM_TZ || "Africa/Cairo",
   gmailQuery: process.env.GMAIL_QUERY?.trim() || undefined,
+  /** Comma-separated Gmail labels to read, e.g. "dn-kafr-eldawar,dn-other". Empty = whole mailbox. */
+  gmailLabels: (process.env.GMAIL_LABELS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
   tokenPath: process.env.GOOGLE_TOKEN_PATH || "/app/secrets/token.json",
   credentialsPath: process.env.GOOGLE_CREDENTIALS_PATH || "/app/secrets/credentials.json",
   cron: process.env.WORKER_CRON || "* * * * *",

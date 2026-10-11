@@ -24,6 +24,9 @@ const alarmSelect = {
   clearTime: true,
   durationMin: true,
   clearType: true,
+  consecNbr: true,
+  cellName: true,
+  device: true,
 } as const;
 
 export class PrismaAlarmRepository implements AlarmRepository {
@@ -37,10 +40,15 @@ export class PrismaAlarmRepository implements AlarmRepository {
   }
 
   async findAlarm(alarmKey: string, alarmTime: Date): Promise<AlarmRecord | null> {
-    return this.db.alarm.findUnique({
-      where: { alarmKey_alarmTime: { alarmKey, alarmTime } },
+    return this.db.alarm.findFirst({
+      where: { alarmKey, alarmTime },
       select: alarmSelect,
+      orderBy: { id: "asc" },
     });
+  }
+
+  async findAlarmByConsec(consecNbr: string): Promise<AlarmRecord | null> {
+    return this.db.alarm.findUnique({ where: { consecNbr }, select: alarmSelect });
   }
 
   async findActiveAlarms(alarmKey: string): Promise<AlarmRecord[]> {
@@ -90,7 +98,7 @@ export class PrismaAlarmRepository implements AlarmRepository {
   async rawMessagesSince(since: Date): Promise<RawMessageInput[]> {
     return this.db.rawMessage.findMany({
       where: { receivedAt: { gte: since } },
-      select: { id: true, gmailId: true, subject: true, receivedAt: true },
+      select: { id: true, gmailId: true, subject: true, receivedAt: true, body: true },
       orderBy: { receivedAt: "asc" },
     });
   }

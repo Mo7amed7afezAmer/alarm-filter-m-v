@@ -8,6 +8,8 @@ export interface MessageMeta {
   gmailId: string;
   subject: string;
   receivedAt: Date;
+  /** Plain-text body (alarm details: CONSEC_NBR, cell name, …). */
+  body: string;
 }
 
 /** What the sync logic needs from Gmail — faked in tests. */
@@ -19,8 +21,14 @@ export interface MailSource {
   currentHistoryId(): Promise<string>;
   /** Ids of messages received after `after` matching `query`, oldest first. */
   listSince(after: Date, query?: string): Promise<string[]>;
-  /** Subject + internalDate, or null if the message no longer exists. */
+  /** Subject + internalDate + body, or null if the message no longer exists. */
   getMeta(id: string): Promise<MessageMeta | null>;
+}
+
+export interface GmailSourceOptions {
+  /** Gmail label names to read (as typed in search, e.g. "dn-kafr-eldawar", or the display name
+   *  "DN/Kafr ElDawar"). Empty = whole mailbox. */
+  labels?: string[];
 }
 
 function status(err: unknown): number | undefined {
@@ -28,7 +36,46 @@ function status(err: unknown): number | undefined {
   return e.response?.status ?? e.status ?? (typeof e.code === "number" ? e.code : undefined);
 }
 
-export function createGmailSource(credentialsPath: string, tokenPath: string): MailSource {
+/** Gmail search form of a label name: "DN/Kafr ElDawar" → "dn-kafr-eldawar". */
+export function labelSearchName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[\s/&]+/g, "-");
+}
+
+function decode(data?: string | null): string {
+  return data ? Buffer.from(data, "base64url").toString("utf8") : "";
+}
+
+/** Prefer text/plain parts; fall back to text/html with tags stripped. */
+export function extractText(part?: gmail_v1.Schema$MessagePart): string {
+  if (!part) return "";
+  const plain: string[] = [];
+  const html: string[] = [];
+  const walk = (p: gmail_v1.Schema$MessagePart) => {
+    if (p.mimeType === "text/plain" && p.body?.data) plain.push(decode(p.body.data));
+    else if (p.mimeType === "text/html" && p.body?.data) html.push(decode(p.body.data));
+    p.parts?.forEach(walk);
+  };
+  walk(part);
+  if (plain.length) return plain.join("\n");
+  return html
+    .join("\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|tr|li|h\d)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+export function createGmailSource(
+  credentialsPath: string,
+  tokenPath: string,
+  opts: GmailSourceOptions = {},
+): MailSource {
   const creds = JSON.parse(readFileSync(credentialsPath, "utf8")) as {
     installed?: { client_id: string; client_secret: string };
   };
@@ -39,40 +86,76 @@ export function createGmailSource(credentialsPath: string, tokenPath: string): M
   });
   auth.setCredentials(JSON.parse(readFileSync(tokenPath, "utf8")));
   const gmail: gmail_v1.Gmail = gmailApi({ version: "v1", auth });
+  const wanted = (opts.labels ?? []).map(labelSearchName).filter(Boolean);
+
+  // Label names → ids, resolved once (lazily) and cached.
+  let labelIds: Promise<string[] | null> | null = null;
+  const resolveLabels = () =>
+    (labelIds ??= (async () => {
+      if (!wanted.length) return null;
+      const { data } = await gmail.users.labels.list({ userId: "me" });
+      const byName = new Map(
+        (data.labels ?? []).map((l) => [labelSearchName(l.name ?? ""), l.id!]),
+      );
+      const missing = wanted.filter((w) => !byName.has(w));
+      if (missing.length) {
+        labelIds = null; // retry next run (label may be created later)
+        throw new Error(`Gmail label(s) not found: ${missing.join(", ")}`);
+      }
+      return wanted.map((w) => byName.get(w)!);
+    })());
+
+  async function historyFor(startHistoryId: string, labelId?: string) {
+    const ids: string[] = [];
+    let pageToken: string | undefined;
+    let historyId = startHistoryId;
+    do {
+      const { data } = await gmail.users.history.list({
+        userId: "me",
+        startHistoryId,
+        labelId,
+        // labelAdded too: a label applied by a filter/user after delivery.
+        historyTypes: ["messageAdded", "labelAdded"],
+        maxResults: 500,
+        pageToken,
+      });
+      for (const h of data.history ?? []) {
+        const msgs = [
+          ...(h.messagesAdded ?? []).map((m) => m.message),
+          ...(h.labelsAdded ?? [])
+            .filter((l) => !labelId || l.labelIds?.includes(labelId))
+            .map((l) => l.message),
+        ];
+        for (const m of msgs) {
+          const labels = m?.labelIds ?? [];
+          if (m?.id && !labels.includes("DRAFT") && !labels.includes("SENT")) ids.push(m.id);
+        }
+      }
+      if (data.historyId) historyId = data.historyId;
+      pageToken = data.nextPageToken ?? undefined;
+    } while (pageToken);
+    return { ids, historyId };
+  }
 
   return {
     async historySince(startHistoryId) {
-      const ids: string[] = [];
-      const seen = new Set<string>();
-      let pageToken: string | undefined;
-      let historyId = startHistoryId;
       try {
-        do {
-          const { data } = await gmail.users.history.list({
-            userId: "me",
-            startHistoryId,
-            historyTypes: ["messageAdded"],
-            maxResults: 500,
-            pageToken,
-          });
-          for (const h of data.history ?? []) {
-            for (const added of h.messagesAdded ?? []) {
-              const id = added.message?.id;
-              const labels = added.message?.labelIds ?? [];
-              if (id && !seen.has(id) && !labels.includes("DRAFT") && !labels.includes("SENT")) {
-                seen.add(id);
-                ids.push(id);
-              }
-            }
-          }
-          if (data.historyId) historyId = data.historyId;
-          pageToken = data.nextPageToken ?? undefined;
-        } while (pageToken);
+        const ids = await resolveLabels();
+        const parts = ids
+          ? await Promise.all(ids.map((id) => historyFor(startHistoryId, id)))
+          : [await historyFor(startHistoryId)];
+        const seen = new Set<string>();
+        const merged: string[] = [];
+        for (const p of parts)
+          for (const id of p.ids) if (!seen.has(id) && seen.add(id)) merged.push(id);
+        const historyId = parts
+          .map((p) => p.historyId)
+          .reduce((a, b) => (BigInt(b) > BigInt(a) ? b : a));
+        return { ids: merged, historyId };
       } catch (err) {
         if (status(err) === 404) return "expired";
         throw err;
       }
-      return { ids, historyId };
     },
 
     async currentHistoryId() {
@@ -82,7 +165,13 @@ export function createGmailSource(credentialsPath: string, tokenPath: string): M
     },
 
     async listSince(after, query) {
-      const q = [`after:${Math.floor(after.getTime() / 1000)}`, query].filter(Boolean).join(" ");
+      await resolveLabels(); // fail fast on a misspelt label
+      const labelQ = wanted.length
+        ? `(${wanted.map((w) => `label:${w}`).join(" OR ")})`
+        : undefined;
+      const q = [`after:${Math.floor(after.getTime() / 1000)}`, labelQ, query]
+        .filter(Boolean)
+        .join(" ");
       const ids: string[] = [];
       let pageToken: string | undefined;
       do {
@@ -100,17 +189,13 @@ export function createGmailSource(credentialsPath: string, tokenPath: string): M
 
     async getMeta(id) {
       try {
-        const { data } = await gmail.users.messages.get({
-          userId: "me",
-          id,
-          format: "metadata",
-          metadataHeaders: ["Subject"],
-        });
+        const { data } = await gmail.users.messages.get({ userId: "me", id, format: "full" });
         const subject = data.payload?.headers?.find((h) => h.name === "Subject")?.value ?? "";
         return {
           gmailId: id,
           subject: subject.replace(/\s*\r?\n\s*/g, " ").trim(),
           receivedAt: new Date(Number(data.internalDate)),
+          body: extractText(data.payload ?? undefined).slice(0, 20_000),
         };
       } catch (err) {
         if (status(err) === 404) return null; // deleted between listing and fetching

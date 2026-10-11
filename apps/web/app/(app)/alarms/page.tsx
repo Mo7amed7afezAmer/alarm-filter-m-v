@@ -17,6 +17,8 @@ interface ActiveAlarm {
   category: string;
   alarmTime: string;
   region: string | null;
+  cellName: string | null;
+  device: string | null;
 }
 
 interface Page<T> {
@@ -61,6 +63,12 @@ function AlarmsView() {
         accessorKey: "site",
         header: "Site",
         cell: (c) => <span className="font-mono text-xs">{c.getValue() as string}</span>,
+      },
+      {
+        id: "cell",
+        header: "Cell / device",
+        accessorFn: (r) => r.cellName ?? r.device ?? "",
+        cell: (c) => <span className="font-mono text-xs">{(c.getValue() as string) || "—"}</span>,
       },
       {
         accessorKey: "region",

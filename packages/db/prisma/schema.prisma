@@ -38,6 +38,8 @@ model RawMessage {
   subject     String
   /// Gmail internalDate. Used as clearTime for EMAIL clears (§7 B.2).
   receivedAt  DateTime
+  /// Plain-text email body (alarm details incl. CONSEC_NBR, cell name). Null for old rows.
+  body        String?
   parseError  String?
   processedAt DateTime?
 
@@ -58,9 +60,14 @@ model Alarm {
   clearTime   DateTime?
   durationMin Int?
   clearType   ClearType?
+  /// From the email body: unique alarm id shared by the alarm and its Clear.
+  consecNbr   String?     @unique
+  cellName    String?
+  device      String?
   createdAt   DateTime    @default(now())
 
-  @@unique([alarmKey, alarmTime])
+  // Not unique any more: different cells can share alarmKey-without-cell + time; identity is consecNbr.
+  @@index([alarmKey, alarmTime])
   @@index([status, category])
   @@index([site])
   @@map("alarms")
@@ -72,9 +79,11 @@ model OrphanClear {
   subject      String
   clearTime    DateTime
   rawMessageId Int
+  consecNbr    String?
   rawMessage   RawMessage @relation(fields: [rawMessageId], references: [id], onDelete: Cascade)
 
   @@index([alarmKey])
+  @@index([consecNbr])
   @@map("orphan_clears")
 }
 

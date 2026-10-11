@@ -22,7 +22,9 @@ describe.skipIf(!url)("PrismaAlarmRepository (integration)", () => {
       await prisma.$transaction(
         async (tx) => {
           // Use a dedicated test DB (alarms_test) — the rule below is rolled back with the rest.
-          await tx.rule.create({ data: { pattern: "LINK FAILURE", category: "DOWN", priority: 1 } });
+          await tx.rule.create({
+            data: { pattern: "LINK FAILURE", category: "DOWN", priority: 1 },
+          });
           const raw = await Promise.all(
             [
               [subj("11-OCT-2026 10:00:00"), "2026-10-11T07:01:00Z"],

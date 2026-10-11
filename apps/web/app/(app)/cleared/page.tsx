@@ -22,6 +22,8 @@ interface ClearedAlarm {
   durationMin: number | null;
   clearType: string | null;
   region: string | null;
+  cellName: string | null;
+  device: string | null;
 }
 
 interface Page<T> {
@@ -77,6 +79,12 @@ function ClearedView() {
         accessorKey: "site",
         header: "Site",
         cell: (c) => <span className="font-mono text-xs">{c.getValue() as string}</span>,
+      },
+      {
+        id: "cell",
+        header: "Cell / device",
+        accessorFn: (r) => r.cellName ?? r.device ?? "",
+        cell: (c) => <span className="font-mono text-xs">{(c.getValue() as string) || "—"}</span>,
       },
       {
         accessorKey: "alarmTime",

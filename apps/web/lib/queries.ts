@@ -64,6 +64,9 @@ export const alarmSelect = {
   clearTime: true,
   durationMin: true,
   clearType: true,
+  cellName: true,
+  device: true,
+  consecNbr: true,
 } as const;
 
 /** Adds `region` / `owner` from the sites table. */

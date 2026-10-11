@@ -23,7 +23,8 @@ export interface RunResult {
 }
 
 const LOCK_ID = 42;
-const FETCH_CONCURRENCY = 10;
+// Small batches: a quota hit then loses at most one batch, and bursts stay gentle.
+const FETCH_CONCURRENCY = 5;
 const IN_CHUNK = 1000;
 
 async function lock(tx: Prisma.TransactionClient) {
@@ -43,15 +44,41 @@ async function knownIds(prisma: PrismaClient, ids: string[]): Promise<Set<string
   return known;
 }
 
-async function fetchAll(source: MailSource, ids: string[]): Promise<MessageMeta[]> {
-  const out: MessageMeta[] = [];
+/** Gmail 429 / 403 rateLimitExceeded / "Quota exceeded". */
+export function isQuotaError(err: unknown): boolean {
+  const e = err as { code?: number; status?: number; message?: string };
+  const code = e.code ?? e.status;
+  return (
+    code === 429 ||
+    (code === 403 && /quota|rate/i.test(e.message ?? "")) ||
+    /Quota exceeded/i.test(e.message ?? "")
+  );
+}
+
+/** Fetches in small batches. On a quota error it STOPS and returns what it already has
+ *  (`throttled: true`) so the run still saves progress instead of losing the whole batch. */
+export async function fetchAll(
+  source: MailSource,
+  ids: string[],
+): Promise<{ metas: MessageMeta[]; throttled: boolean }> {
+  const metas: MessageMeta[] = [];
   for (let i = 0; i < ids.length; i += FETCH_CONCURRENCY) {
-    const metas = await Promise.all(
+    const results = await Promise.allSettled(
       ids.slice(i, i + FETCH_CONCURRENCY).map((id) => source.getMeta(id)),
     );
-    for (const m of metas) if (m) out.push(m);
+    let throttled = false;
+    for (const r of results) {
+      if (r.status === "fulfilled") {
+        if (r.value) metas.push(r.value);
+      } else if (isQuotaError(r.reason)) {
+        throttled = true;
+      } else {
+        throw r.reason;
+      }
+    }
+    if (throttled) return { metas, throttled: true };
   }
-  return out;
+  return { metas, throttled: false };
 }
 
 export async function runOnce(deps: RunDeps): Promise<RunResult> {
@@ -88,7 +115,14 @@ export async function runOnce(deps: RunDeps): Promise<RunResult> {
     backfillHours: deps.backfillHours,
     query: deps.query,
   });
-  const metas = await fetchAll(source, plan.ids);
+  const { metas, throttled } = await fetchAll(source, plan.ids);
+  if (throttled) {
+    log(
+      `Gmail quota hit after ${metas.length}/${plan.ids.length} messages — saving those, continuing next run`,
+    );
+  }
+  // Only advance the sync position when everything discovered was actually fetched.
+  const nextHistoryId = throttled ? null : plan.nextHistoryId;
 
   const processed = await prisma.$transaction(
     async (tx) => {
@@ -97,7 +131,7 @@ export async function runOnce(deps: RunDeps): Promise<RunResult> {
       // Includes anything left unprocessed by an earlier crash.
       const pending = await tx.rawMessage.findMany({
         where: { processedAt: null },
-        select: { id: true, gmailId: true, subject: true, receivedAt: true },
+        select: { id: true, gmailId: true, subject: true, receivedAt: true, body: true },
         orderBy: { receivedAt: "asc" },
       });
       const summary = await new MatchingEngine(new PrismaAlarmRepository(tx), {
@@ -109,7 +143,7 @@ export async function runOnce(deps: RunDeps): Promise<RunResult> {
           lastRunAt: new Date(),
           lastRunMessages: metas.length,
           lastError: null,
-          ...(plan.nextHistoryId ? { lastHistoryId: plan.nextHistoryId } : {}),
+          ...(nextHistoryId ? { lastHistoryId: nextHistoryId } : {}),
         },
       });
       return summary;

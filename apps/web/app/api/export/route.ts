@@ -53,6 +53,9 @@ export const GET = handler(async (req: Request) => {
   ws.columns = [
     { header: "Alarm", key: "alarmName", width: 42 },
     { header: "Site", key: "site", width: 36 },
+    { header: "Cell", key: "cellName", width: 26 },
+    { header: "Device", key: "device", width: 10 },
+    { header: "CONSEC_NBR", key: "consecNbr", width: 12 },
     { header: "Region", key: "region", width: 14 },
     { header: "Category", key: "category", width: 10 },
     { header: `Alarm time (${ALARM_TZ})`, key: "alarmTime", width: 22 },

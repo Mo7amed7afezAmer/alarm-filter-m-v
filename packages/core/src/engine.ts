@@ -1,7 +1,11 @@
 // Matching engine — CLAUDE.md §7. Pure logic over an async repository interface.
+//
+// Identity: when the email body carries CONSEC_NBR (§5), it IS the alarm's identity — the alarm
+// and its Clear share it, and two alarms with the same subject but different CONSEC_NBR are two
+// alarms (e.g. different cells). Without a body/CONSEC_NBR the subject rules (key + time) apply.
 import type { Category } from "./index.js";
 import { classify, type RuleRecord } from "./classify.js";
-import { parseSubject, type HashAlarm } from "./parser.js";
+import { parseMessage, type HashAlarm, type ParseResult } from "./parser.js";
 
 export type AlarmStatus = "ACTIVE" | "CLEARED";
 export type ClearType = "EMAIL" | "AUTO_SUPERSEDED";
@@ -17,6 +21,9 @@ export interface AlarmRecord {
   clearTime: Date | null;
   durationMin: number | null;
   clearType: ClearType | null;
+  consecNbr: string | null;
+  cellName: string | null;
+  device: string | null;
 }
 
 export type NewAlarm = Omit<AlarmRecord, "id">;
@@ -33,6 +40,7 @@ export interface OrphanClearRecord {
   subject: string;
   clearTime: Date;
   rawMessageId: number;
+  consecNbr: string | null;
 }
 
 export interface RawMessageInput {
@@ -40,12 +48,15 @@ export interface RawMessageInput {
   gmailId: string;
   subject: string;
   receivedAt: Date;
+  /** Plain-text body; null/undefined when not fetched. */
+  body?: string | null;
 }
 
 /** Storage operations the engine needs. Implementations must run inside one transaction per batch. */
 export interface AlarmRepository {
   loadRules(): Promise<RuleRecord[]>;
   findAlarm(alarmKey: string, alarmTime: Date): Promise<AlarmRecord | null>;
+  findAlarmByConsec(consecNbr: string): Promise<AlarmRecord | null>;
   findActiveAlarms(alarmKey: string): Promise<AlarmRecord[]>;
   createAlarm(alarm: NewAlarm): Promise<AlarmRecord>;
   closeAlarm(id: number, patch: ClosePatch): Promise<void>;
@@ -56,7 +67,7 @@ export interface AlarmRepository {
   /** reprocess(): delete alarms with alarmTime >= since, reopen alarms closed at/after since,
    *  delete orphan clears whose raw message was received at/after since. */
   resetWindow(since: Date): Promise<void>;
-  /** Raw messages received at/after `since`, any order. */
+  /** Raw messages received at/after `since`, any order, with bodies. */
   rawMessagesSince(since: Date): Promise<RawMessageInput[]>;
 }
 
@@ -86,7 +97,7 @@ export function durationMinutes(from: Date, to: Date): number {
 
 interface Prepared {
   msg: RawMessageInput;
-  parsed: ReturnType<typeof parseSubject>;
+  parsed: ParseResult;
 }
 
 /** §7 ordering: alarmTime then receivedAt. Alarms sort before Clears at the same alarmTime so a
@@ -122,7 +133,10 @@ export class MatchingEngine {
   async processBatch(messages: readonly RawMessageInput[]): Promise<BatchSummary> {
     this.rules = await this.repo.loadRules();
     const prepared = messages
-      .map((msg) => ({ msg, parsed: parseSubject(msg.subject, { timeZone: this.timeZone }) }))
+      .map((msg) => ({
+        msg,
+        parsed: parseMessage(msg.subject, msg.body, { timeZone: this.timeZone }),
+      }))
       .sort(compare);
 
     const summary = emptySummary();
@@ -157,8 +171,11 @@ export class MatchingEngine {
 
   // §7 A
   private async handleAlarm(v: HashAlarm): Promise<Outcome> {
-    // A.1 exact duplicate (any status)
-    if (await this.repo.findAlarm(v.alarmKey, v.alarmTime)) return "duplicate";
+    // A.1 duplicate: same CONSEC_NBR, or (no CONSEC_NBR) same key + time.
+    const dup = v.consecNbr
+      ? await this.repo.findAlarmByConsec(v.consecNbr)
+      : await this.repo.findAlarm(v.alarmKey, v.alarmTime);
+    if (dup) return "duplicate";
 
     const base: NewAlarm = {
       alarmKey: v.alarmKey,
@@ -170,6 +187,9 @@ export class MatchingEngine {
       clearTime: null,
       durationMin: null,
       clearType: null,
+      consecNbr: v.consecNbr,
+      cellName: v.cellName,
+      device: v.device,
     };
 
     const active = await this.repo.findActiveAlarms(v.alarmKey);
@@ -224,17 +244,24 @@ export class MatchingEngine {
   private async handleClear(v: HashAlarm, msg: RawMessageInput): Promise<Outcome> {
     const clearTime = msg.receivedAt; // §7 B.2: subject time is the ALARM time
 
-    const exact = await this.repo.findAlarm(v.alarmKey, v.alarmTime);
     let target: AlarmRecord | undefined;
-    if (exact) {
-      if (exact.status !== "ACTIVE") return "stale_clear";
-      target = exact;
+    if (v.consecNbr) {
+      // Exact identity: the Clear carries its alarm's CONSEC_NBR. No fallback guessing.
+      const a = await this.repo.findAlarmByConsec(v.consecNbr);
+      if (a && a.status !== "ACTIVE") return "stale_clear";
+      target = a ?? undefined;
     } else {
-      const active = await this.repo.findActiveAlarms(v.alarmKey);
-      target = active.reduce<AlarmRecord | undefined>(
-        (m, a) => (!m || a.alarmTime > m.alarmTime ? a : m),
-        undefined,
-      );
+      const exact = await this.repo.findAlarm(v.alarmKey, v.alarmTime);
+      if (exact) {
+        if (exact.status !== "ACTIVE") return "stale_clear";
+        target = exact;
+      } else {
+        const active = await this.repo.findActiveAlarms(v.alarmKey);
+        target = active.reduce<AlarmRecord | undefined>(
+          (m, a) => (!m || a.alarmTime > m.alarmTime ? a : m),
+          undefined,
+        );
+      }
     }
 
     if (target) {
@@ -252,6 +279,7 @@ export class MatchingEngine {
       subject: msg.subject,
       clearTime,
       rawMessageId: msg.id,
+      consecNbr: v.consecNbr,
     });
     return "orphan";
   }
@@ -260,7 +288,8 @@ export class MatchingEngine {
     const orphans = await this.repo.findOrphanClears(v.alarmKey);
     return orphans
       .filter((o) => {
-        const p = parseSubject(o.subject, { timeZone: this.timeZone });
+        if (v.consecNbr || o.consecNbr) return o.consecNbr === v.consecNbr;
+        const p = parseMessage(o.subject, null, { timeZone: this.timeZone });
         return p.ok && p.value.alarmTime?.getTime() === v.alarmTime.getTime();
       })
       .sort((a, b) => a.clearTime.getTime() - b.clearTime.getTime() || a.id - b.id)[0];

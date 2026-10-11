@@ -1,4 +1,5 @@
 // Subject-line parser. Shapes confirmed from samples/subjects.txt — see CLAUDE.md §5.
+import { parseBody } from "./body.js";
 import { parseAlarmStamp } from "./time.js";
 
 export const DEFAULT_ALARM_TZ = "Africa/Cairo";
@@ -14,7 +15,13 @@ export interface HashAlarm {
   site: string;
   /** Subject time as UTC. For a Clear this is the ORIGINAL alarm's time, not the clear time. */
   alarmTime: Date;
+  /** `${alarmName}||${site}`, plus `||${cellName}` when the body names a cell. */
   alarmKey: string;
+  /** From the email body (null when there is no parseable body). */
+  consecNbr: string | null;
+  cellName: string | null;
+  device: string | null;
+  neName: string | null;
 }
 
 /** `Huawei Alram Notify New alarm: NE/ALARM/SEVERITY` — carries no time and no Clear form yet. */
@@ -42,8 +49,33 @@ export interface ParseOptions {
 const HASH_RE = /^(?<clear>CLEARED_)?(?<name>.+?) on #(?<site>[^#]+)# at \|(?<time>[^|]*)\|\s*$/i;
 const HUAWEI_RE = /^Huawei Alram Notify New alarm:\s*(?<ne>[^/]+)\/(?<name>.+)\/(?<sev>[^/]+)$/i;
 
-export function makeAlarmKey(alarmName: string, site: string): string {
-  return `${alarmName}||${site}`;
+export function makeAlarmKey(alarmName: string, site: string, cellName?: string | null): string {
+  return cellName ? `${alarmName}||${site}||${cellName}` : `${alarmName}||${site}`;
+}
+
+/** Subject + body. Body fields (CONSEC_NBR, cell name, …) refine HASH alarms; the subject
+ *  stays authoritative for name, site, time and Clear detection. */
+export function parseMessage(
+  subject: string,
+  body: string | null | undefined,
+  opts: ParseOptions = {},
+): ParseResult {
+  const r = parseSubject(subject, opts);
+  if (!r.ok || r.value.format !== "HASH") return r;
+  const b = parseBody(body);
+  if (!b) return r;
+  const v = r.value;
+  return {
+    ok: true,
+    value: {
+      ...v,
+      consecNbr: b.consecNbr,
+      cellName: b.cellName,
+      device: b.device,
+      neName: b.neName,
+      alarmKey: makeAlarmKey(v.alarmName, v.site, b.cellName),
+    },
+  };
 }
 
 export function parseSubject(subject: string, opts: ParseOptions = {}): ParseResult {
@@ -71,6 +103,10 @@ export function parseSubject(subject: string, opts: ParseOptions = {}): ParseRes
         site,
         alarmTime,
         alarmKey: makeAlarmKey(alarmName, site),
+        consecNbr: null,
+        cellName: null,
+        device: null,
+        neName: null,
       },
     };
   }

@@ -23,6 +23,7 @@
     "typecheck": "pnpm -r typecheck && tsc -p scripts",
     "gmail:auth": "tsx scripts/gmail-auth.ts",
     "gmail:samples": "tsx scripts/fetch-samples.ts",
+    "gmail:bodies": "tsx scripts/fetch-bodies.ts",
     "parse:samples": "tsx scripts/parse-samples.ts"
   },
   "devDependencies": {
