@@ -3,3 +3,6 @@
 export type Category = "DOWN" | "POWER" | "OTHER";
 
 export const CATEGORIES: readonly Category[] = ["DOWN", "POWER", "OTHER"] as const;
+
+export * from "./parser.js";
+export { parseAlarmStamp, zonedToUtc } from "./time.js";

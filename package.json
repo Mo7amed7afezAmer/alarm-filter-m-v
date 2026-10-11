@@ -20,7 +20,8 @@
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r typecheck && tsc -p scripts",
     "gmail:auth": "tsx scripts/gmail-auth.ts",
-    "gmail:samples": "tsx scripts/fetch-samples.ts"
+    "gmail:samples": "tsx scripts/fetch-samples.ts",
+    "parse:samples": "tsx scripts/parse-samples.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

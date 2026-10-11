@@ -43,7 +43,10 @@ async function getMeta(id: string): Promise<{ date: Date; subject: string }> {
     metadataHeaders: ["Subject"],
   });
   const subject = data.payload?.headers?.find((h) => h.name === "Subject")?.value ?? "";
-  return { date: new Date(Number(data.internalDate)), subject: subject.replace(/\s*\r?\n\s*/g, " ") };
+  return {
+    date: new Date(Number(data.internalDate)),
+    subject: subject.replace(/\s*\r?\n\s*/g, " "),
+  };
 }
 
 async function main() {

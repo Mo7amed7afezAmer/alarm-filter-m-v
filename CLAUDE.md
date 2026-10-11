@@ -57,19 +57,34 @@ Alarm subject example:
 ```
 S_D_N_BTS O&M LINK FAILURE on #451_S_BH-KOM-AZIZA_0D36DE# at |08-OCT-2026 11:01:03 |
 ```
-Clear subject: the same subject text containing the word `Clear`
-(exact position to be confirmed from real samples in `samples/subjects.txt`).
+**Confirmed from 300 real samples (2026-10-11, `samples/subjects.txt`):**
+- **Clear = prefix `CLEARED_`** on the otherwise identical alarm subject. 85/85 clears use it;
+  "clear" never appears anywhere else.
+  `CLEARED_S_D_N_FENCE GATE ALARM on #SRAN_..._0732DE# at |11-OCT-2026 15:49:55 |`
+- **A Clear carries the ORIGINAL alarm time, not the clear time.** Its subject time equals the
+  alarm's subject time (seen with clears for alarms from 31-AUG / 24-SEP / 30-SEP).
+  ⇒ the clear time must come from the Clear email's Gmail `internalDate` (`receivedAt`).
+- Name prefixes seen: `S_D_N_` (most) and `D_S_`. Kept as part of `alarmName`.
+- Some names are vendor-truncated (`SHELTER DOO`, `AIR CONDITIO`); the alarm and its Clear are
+  truncated identically, so they are kept verbatim.
+- Some names carry a `;Default System Time` suffix → split into `nameSuffix`, excluded from key.
+- **Second format (32% of mail):** `Huawei Alram Notify New alarm: <NE>/<alarm>/<severity>`
+  e.g. `...: Hossary-RNC27/UMTS Cell Unavailable/Major`. No time, NE is an RNC/BSC (not a
+  site), and no Clear form was seen in the samples. Parsed as `format: "HUAWEI"`,
+  `alarmTime: null`. How the engine treats it is still to be decided.
 
-Parser must extract:
+Parser (`packages/core/src/parser.ts`, `parseSubject(subject, { timeZone })`) extracts:
 | Field | Rule |
 |---|---|
-| `alarmName` | text before ` on #` (trimmed) |
+| `isClear` | subject starts with `CLEARED_` (case-insensitive) |
+| `alarmName` | text before ` on #`, minus `CLEARED_` and minus any `;…` suffix (trimmed) |
+| `nameSuffix` | text after `;` in the name, or null |
 | `site` | text between `#` and `#` |
-| `alarmTime` | text between `|` and `|`, format `DD-MON-YYYY HH:mm:ss`, timezone env `ALARM_TZ` (default `Africa/Cairo`, confirm with user) |
-| `isClear` | subject contains `Clear` (case-insensitive, word boundary) |
+| `alarmTime` | text between `|` and `|`, format `DD-MON-YYYY HH:mm:ss`, wall-clock in `ALARM_TZ` (default `Africa/Cairo`), stored as UTC. For a Clear this is the original alarm's time |
 | `alarmKey` | `${alarmName}||${site}` — **never includes time** |
 
 Unparseable subjects → stored in `raw_messages` with `parse_error`, never dropped.
+`corepack pnpm parse:samples` runs the parser over all samples and lists failures.
 
 ## 6. Classification Rules
 Stored in table `rules` (editable in UI). Seed:
@@ -167,7 +182,8 @@ GMAIL_QUERY=            # optional Gmail search filter, e.g. from:alarms@vendor.
 - [ ] Phase 0 — repo, tooling, Docker skeleton (all done except `docker compose up -d db`
       health check — Docker Desktop can't start: BIOS virtualization off + WSL2 missing)
 - [x] Phase 1 — Gmail OAuth + sample fetch (token.json saved; 300 samples in samples/subjects.txt)
-- [ ] Phase 2 — parser + tests
+- [ ] Phase 2 — parser + tests (done: parser, 26 tests, 300/300 samples parse; waiting on
+      ALARM_TZ confirmation and the Huawei/clear-time decisions)
 - [ ] Phase 3 — Prisma schema + db container
 - [ ] Phase 4 — matching engine + tests
 - [ ] Phase 5 — worker container (node-cron)
