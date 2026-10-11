@@ -1,0 +1,25 @@
+# secrets — never commit
+credentials.json
+token.json
+.env
+.env*
+!.env.example
+
+# runtime data
+data/
+backups/
+
+# build / deps
+node_modules/
+.next/
+dist/
+out/
+*.tsbuildinfo
+coverage/
+
+# misc
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/

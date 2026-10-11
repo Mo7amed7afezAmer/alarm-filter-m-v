@@ -1,0 +1,21 @@
+// Remaining models are added in Phase 3 (see CLAUDE.md §8). SystemStatus is here early
+// because `prisma generate` refuses an empty schema. No migrations exist yet.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SystemStatus {
+  id              Int       @id @default(1)
+  lastHistoryId   String?
+  lastRunAt       DateTime?
+  lastError       String?
+  lastRunMessages Int       @default(0)
+  reprocessDays   Int?
+}

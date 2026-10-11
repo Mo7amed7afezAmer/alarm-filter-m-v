@@ -1,0 +1,8 @@
+node_modules
+dist
+.next
+pnpm-lock.yaml
+backups
+data
+samples
+*.md

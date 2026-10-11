@@ -1,0 +1,186 @@
+# Alarm Filter — Mobile Network Alarm Email Processor (Local / Docker)
+
+## 1. Purpose
+A web system that reads mobile-network alarm emails from Gmail, classifies them
+(Down / Power / Other), matches each alarm with its later "Clear" email, and shows:
+- **Alarm page**: alarms still active (no Clear received yet)
+- **Clear page**: alarms that received a Clear (with duration)
+- **Dashboard**: statistics
+
+Runs **locally on one machine with Docker Compose**, accessed by colleagues over the
+LAN at `http://<host-ip>:3000`. No cloud services except Gmail API itself. Zero cost.
+
+## 2. Working Rules (read every session)
+- Language: **TypeScript everywhere** (Node 20). No Python.
+- Everything runs in Docker. Do not install Postgres or pnpm globally on the host.
+  Local dev may use `pnpm` inside the repo, but the deliverable is `docker compose up`.
+- Before any command that destroys data (`docker compose down -v`, `prisma migrate
+  reset`, dropping tables) → show the command and ASK first.
+- Never ask the user for passwords, tokens or secrets in chat. Use `.env` (gitignored).
+- `credentials.json`, `token.json`, `.env`, `data/` are in `.gitignore`. Never commit them.
+- Write tests for the parser and the matching engine BEFORE building the UI.
+- Keep "## 11. Current Status" at the bottom of this file updated after every phase.
+- Prefer small, reviewable steps. Explain what changed after each step in 3–5 lines.
+
+## 3. Stack
+| Layer | Choice |
+|---|---|
+| Monorepo | pnpm workspaces: `apps/worker`, `apps/web`, `packages/core`, `packages/db` |
+| Worker | Node 20 long-running process, `node-cron` every 1 min, in-process lock + `pg_advisory_xact_lock`; exposes `GET /health` on :4000 |
+| Web + API | Next.js 14 (App Router), API = Route Handlers under `app/api/*`, `next start` on :3000, `HOSTNAME=0.0.0.0` |
+| DB | PostgreSQL 16 container, data in named volume `pgdata`; Prisma ORM |
+| Auth | NextAuth (Credentials provider), JWT sessions, roles `viewer` / `admin` |
+| UI | React + Tailwind + shadcn/ui, TanStack Table, Recharts |
+| Excel export | `exceljs` |
+| Gmail | `googleapis` npm, OAuth2 Desktop client; `token.json` mounted read-only into worker |
+| Backups | `backup` container: daily `pg_dump` to `./backups/`, keep 30 days |
+| Tests | Vitest |
+| Orchestration | `docker-compose.yml` (prod) + `docker-compose.dev.yml` (hot reload) |
+
+## 4. Docker Layout
+```
+docker-compose.yml
+  db       postgres:16-alpine, volume pgdata, healthcheck pg_isready
+  migrate  one-shot: prisma migrate deploy + seed (depends_on db healthy)
+  worker   build apps/worker, restart: unless-stopped, mounts ./token.json:ro
+  web      build apps/web, ports 3000:3000, restart: unless-stopped
+  backup   alpine + postgres-client, cron 02:00 pg_dump → ./backups
+```
+- All services on one network; only `web` (3000) is published. `db` is not exposed.
+- Images: multi-stage, `node:20-alpine`, non-root user, `.dockerignore` present.
+- `web` uses Next.js `output: 'standalone'` to keep the image small.
+- Healthchecks on db, web (`/api/health`) and worker (`/health`).
+- `docker-compose.dev.yml` overrides: bind-mount source, `pnpm dev`, `next dev`.
+
+## 5. Email Format
+Alarm subject example:
+```
+S_D_N_BTS O&M LINK FAILURE on #451_S_BH-KOM-AZIZA_0D36DE# at |08-OCT-2026 11:01:03 |
+```
+Clear subject: the same subject text containing the word `Clear`
+(exact position to be confirmed from real samples in `samples/subjects.txt`).
+
+Parser must extract:
+| Field | Rule |
+|---|---|
+| `alarmName` | text before ` on #` (trimmed) |
+| `site` | text between `#` and `#` |
+| `alarmTime` | text between `|` and `|`, format `DD-MON-YYYY HH:mm:ss`, timezone env `ALARM_TZ` (default `Africa/Cairo`, confirm with user) |
+| `isClear` | subject contains `Clear` (case-insensitive, word boundary) |
+| `alarmKey` | `${alarmName}||${site}` — **never includes time** |
+
+Unparseable subjects → stored in `raw_messages` with `parse_error`, never dropped.
+
+## 6. Classification Rules
+Stored in table `rules` (editable in UI). Seed:
+- **DOWN**: `LINK FAILURE`, `BTS DOWN`, `CELL UNAVAILABLE`, `SITE DOWN`, `UNREACHABLE`, `NODE DOWN`
+- **POWER**: `MAINS`, `AC FAIL`, `BATTERY`, `RECTIFIER`, `DC LOW`, `GENERATOR`, `POWER`
+- **OTHER**: anything else
+Match on `alarmName`, case-insensitive, first rule by `priority` wins.
+
+## 7. Matching Engine (core logic — must be fully tested)
+Runs for every new message, ordered by `alarmTime` then `receivedAt`.
+
+**A. Alarm message (`isClear = false`)**
+1. Alarm with same `alarmKey` AND same `alarmTime` exists → duplicate, ignore.
+2. ACTIVE alarm with same `alarmKey` and OLDER `alarmTime` exists →
+   close it: `status=CLEARED`, `clearType=AUTO_SUPERSEDED`, `clearTime=newAlarmTime`,
+   then create the new alarm as ACTIVE.
+3. Else → create new ACTIVE alarm.
+
+**B. Clear message (`isClear = true`)**
+1. Find ACTIVE alarm with same `alarmKey`. If the Clear subject carries a time matching
+   an alarm's `alarmTime`, prefer it; otherwise take the latest active.
+2. Found → `status=CLEARED`, `clearType=EMAIL`, `clearTime=clearMessageTime`,
+   `durationMin = clearTime - alarmTime`.
+3. Not found → insert into `orphan_clears`. Never silently drop.
+
+**C. Idempotency & safety**
+- Dedupe on `gmailId` in `raw_messages`.
+- Worker: in-process `running` flag + `pg_advisory_xact_lock(42)` per run.
+- Use time from the subject, NOT email received time, for all duration math.
+- `reprocess(days)` rebuilds alarms from `raw_messages` deterministically; running it
+  twice yields identical results.
+- Gmail sync: `users.history.list` from `SystemStatus.lastHistoryId`; on first run or
+  `404 historyId too old` fall back to `messages.list` with `after:`.
+- Process at most 200 messages per run; the next minute continues.
+
+Required test cases (Vitest, in `packages/core`):
+1. Normal alarm → Clear 1 hour later
+2. Alarm → Clear 1 day later
+3. Alarm → same alarm with newer time (AUTO_SUPERSEDED) → Clear for the new one
+4. Exact duplicate alarm email
+5. Clear with no matching active alarm (orphan)
+6. Out-of-order delivery (Clear email arrives before alarm email)
+7. Subject that does not parse
+
+## 8. Database Schema (Prisma)
+```
+RawMessage   id, gmailId @unique, subject, receivedAt, parseError?, processedAt?
+Alarm        id, alarmKey, alarmName, site, category(DOWN|POWER|OTHER),
+             alarmTime, status(ACTIVE|CLEARED), clearTime?, durationMin?,
+             clearType?(EMAIL|AUTO_SUPERSEDED), createdAt
+             @@unique([alarmKey, alarmTime]) @@index([status, category]) @@index([site])
+OrphanClear  id, alarmKey, subject, clearTime, rawMessageId
+Rule         id, pattern, category, priority
+Site         site @id, region?, owner?
+User         id, email @unique, passwordHash, role(VIEWER|ADMIN)
+SystemStatus id=1, lastHistoryId, lastRunAt, lastError?, lastRunMessages, reprocessDays?
+```
+
+## 9. API (Next.js Route Handlers)
+- `GET /api/alarms/active?category&site&region&minHours&page`
+- `GET /api/alarms/cleared?from&to&category&site&page`
+- `GET /api/stats/summary` → active counts per category, MTTR per category, last run
+- `GET /api/stats/daily?days=30`
+- `GET /api/stats/top-sites?limit=10`
+- `GET /api/export?status=active|cleared&...` → .xlsx
+- `GET|PUT /api/rules` (admin)
+- `POST /api/reprocess?days=7` (admin) → sets `SystemStatus.reprocessDays`; worker picks it up
+- `GET /api/health` → db ok + worker lastRunAt age
+
+## 10. UI Pages
+1. `/alarms` — active table; filters category/site/region in URL; live "age" column
+   (30s); rows older than `ALERT_HOURS` (default 4) highlighted; auto-refresh 60s.
+2. `/cleared` — cleared table; date range; duration; clearType badge; Excel export.
+3. `/dashboard` — counters per category, 30-day stacked bar, top-10 sites, MTTR,
+   status bar "last sync X min ago" (red if > 5 min or `lastError`).
+4. `/settings` — rules editor, users (admin only).
+English UI, numbers LTR.
+
+## 11. Environment (.env.example)
+```
+POSTGRES_USER=alarm
+POSTGRES_PASSWORD=change-me
+POSTGRES_DB=alarms
+DATABASE_URL=postgresql://alarm:change-me@db:5432/alarms
+NEXTAUTH_SECRET=
+NEXTAUTH_URL=http://<host-ip>:3000
+ADMIN_EMAIL=admin@local
+ADMIN_PASSWORD=
+ALARM_TZ=Africa/Cairo
+ALERT_HOURS=4
+GMAIL_QUERY=            # optional Gmail search filter, e.g. from:alarms@vendor.com
+```
+
+## 12. Current Status
+- [ ] Phase 0 — repo, tooling, Docker skeleton (all done except `docker compose up -d db`
+      health check — Docker Desktop can't start: BIOS virtualization off + WSL2 missing)
+- [ ] Phase 1 — Gmail OAuth + sample fetch
+- [ ] Phase 2 — parser + tests
+- [ ] Phase 3 — Prisma schema + db container
+- [ ] Phase 4 — matching engine + tests
+- [ ] Phase 5 — worker container (node-cron)
+- [ ] Phase 6 — Next.js API + auth
+- [ ] Phase 7 — UI pages
+- [ ] Phase 8 — full compose, backups, LAN access, 24h parallel run, RUNBOOK
+Notes:
+- pnpm is NOT installed globally (§2). Run it via corepack: `corepack pnpm <cmd>`
+  (version pinned by `packageManager` in root package.json). `pnpm dlx` is broken on this
+  host (Windows cache ENOENT) — use `npx` for one-off generators.
+- Host has Node 24; Docker images will target Node 20 per §3. Node 20 reached EOL in
+  April 2026 — decide before Phase 5 whether to move images to `node:22-alpine`/`node:24-alpine`.
+- `next.config.mjs` emits `output: 'standalone'` everywhere except native Windows builds
+  (needs symlink privilege); the Docker (Linux) build always gets standalone.
+- `SystemStatus` model was added to schema.prisma in Phase 0 only because Prisma refuses an
+  empty schema; no migrations yet.

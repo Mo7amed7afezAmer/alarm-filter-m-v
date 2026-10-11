@@ -1,0 +1,23 @@
+**/node_modules
+**/.next
+**/dist
+**/coverage
+**/*.log
+.git
+.gitignore
+.vscode
+.idea
+
+# secrets & runtime data are mounted, never baked into images
+credentials.json
+token.json
+.env
+.env*
+!.env.example
+data
+backups
+samples
+
+docker-compose*.yml
+Makefile
+*.md

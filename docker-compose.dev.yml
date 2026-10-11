@@ -1,0 +1,8 @@
+# Dev overrides: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Hot-reload worker/web services are added here as they are created (Phases 5–7).
+
+services:
+  db:
+    # Expose Postgres to the host for `pnpm dev`, Prisma Studio, etc. — bound to localhost only.
+    ports:
+      - "127.0.0.1:5432:5432"
