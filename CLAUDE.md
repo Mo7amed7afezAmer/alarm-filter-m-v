@@ -1,4 +1,4 @@
-# Alarm Filter — Mobile Network Alarm Email Processor (Local / Docker)
+/53+# Alarm Filter — Mobile Network Alarm Email Processor (Local / Docker)
 
 ## 1. Purpose
 A web system that reads mobile-network alarm emails from Gmail, classifies them
@@ -209,7 +209,8 @@ GMAIL_QUERY=            # optional Gmail search filter, e.g. from:alarms@vendor.
       ADMIN_PASSWORD is set in .env)
 - [x] Phase 4 — matching engine + tests (20 engine tests incl. the 7 required + reprocess
       idempotency; PrismaAlarmRepository verified by integration test on compose db)
-- [ ] Phase 5 — worker container (node-cron)
+- [x] Phase 5 — worker container (node-cron; healthy, ~200 msgs/min backfilling 24h; image
+      144MB on disk — `docker images` shows ~242MB because it counts the base image's npm layer)
 - [ ] Phase 6 — Next.js API + auth
 - [ ] Phase 7 — UI pages
 - [ ] Phase 8 — full compose, backups, LAN access, 24h parallel run, RUNBOOK
@@ -217,8 +218,8 @@ Notes:
 - pnpm is NOT installed globally (§2). Run it via corepack: `corepack pnpm <cmd>`
   (version pinned by `packageManager` in root package.json). `pnpm dlx` is broken on this
   host (Windows cache ENOENT) — use `npx` for one-off generators.
-- Host has Node 24; Docker images will target Node 20 per §3. Node 20 reached EOL in
-  April 2026 — decide before Phase 5 whether to move images to `node:22-alpine`/`node:24-alpine`.
+- Host has Node 24; Docker images use `node:20-alpine` per §3 — user decision 2026-10-11
+  to keep it despite Node 20 being EOL since April 2026 (revisit if security updates matter).
 - `next.config.mjs` emits `output: 'standalone'` everywhere except native Windows builds
   (needs symlink privilege); the Docker (Linux) build always gets standalone.
 - DB tables are snake_case (`raw_messages`, `alarms`, `orphan_clears`, `rules`, `sites`,
@@ -231,6 +232,12 @@ Notes:
 - DB integration test (`packages/db/src/repository.test.ts`) runs only when
   `TEST_DATABASE_URL` is set (db exposed on 127.0.0.1:5432 via docker-compose.dev.yml); it
   works inside a rolled-back transaction, so it leaves no rows.
+- Worker (`apps/worker`): mounts BOTH token.json and credentials.json read-only (refreshing
+  the access token needs the client secret). Sync never advances `lastHistoryId` until every
+  discovered message is stored, so the 200/run cap can't lose mail. First run / expired
+  history → messages.list for the last `INITIAL_BACKFILL_HOURS` (24). `GMAIL_QUERY` only
+  applies to that fallback listing (history.list has no query). /health is 503 only when
+  runs stop (> 5 min); a Gmail error shows in `lastError` but stays 200 to avoid restart loops.
 - Gmail access uses `@googleapis/gmail` + `google-auth-library` (same API as `googleapis`,
   far smaller — keeps the worker image < 200MB). Scope: gmail.readonly.
 - Gmail account: de.alarms@mobi-egypt.com (Workspace). OAuth app is in Testing mode with this

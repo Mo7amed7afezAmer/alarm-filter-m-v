@@ -37,6 +37,35 @@ services:
     restart: "no"
     networks: [internal]
 
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-alarm}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-alarms}
+      ALARM_TZ: ${ALARM_TZ:-Africa/Cairo}
+      GMAIL_QUERY: ${GMAIL_QUERY:-}
+      GOOGLE_TOKEN_PATH: /app/secrets/token.json
+      GOOGLE_CREDENTIALS_PATH: /app/secrets/credentials.json
+    volumes:
+      # credentials.json is needed too: refreshing the access token requires the client secret.
+      - ./token.json:/app/secrets/token.json:ro
+      - ./credentials.json:/app/secrets/credentials.json:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    networks: [internal]
+    # /health on :4000 is internal only (web reads SystemStatus from the db directly).
+
 volumes:
   pgdata:
 
