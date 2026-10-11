@@ -1,5 +1,4 @@
-// Remaining models are added in Phase 3 (see CLAUDE.md §8). SystemStatus is here early
-// because `prisma generate` refuses an empty schema. No migrations exist yet.
+// Schema per CLAUDE.md §8. Table names are snake_case (as referenced in §5/§7).
 
 generator client {
   provider      = "prisma-client-js"
@@ -11,6 +10,102 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Category {
+  DOWN
+  POWER
+  OTHER
+}
+
+enum AlarmStatus {
+  ACTIVE
+  CLEARED
+}
+
+enum ClearType {
+  EMAIL
+  AUTO_SUPERSEDED
+}
+
+enum Role {
+  VIEWER
+  ADMIN
+}
+
+/// Every Gmail message seen, parseable or not. Source of truth for reprocess().
+model RawMessage {
+  id          Int       @id @default(autoincrement())
+  gmailId     String    @unique
+  subject     String
+  /// Gmail internalDate. Used as clearTime for EMAIL clears (§7 B.2).
+  receivedAt  DateTime
+  parseError  String?
+  processedAt DateTime?
+
+  orphanClears OrphanClear[]
+
+  @@index([receivedAt])
+  @@map("raw_messages")
+}
+
+model Alarm {
+  id          Int         @id @default(autoincrement())
+  alarmKey    String
+  alarmName   String
+  site        String
+  category    Category
+  alarmTime   DateTime
+  status      AlarmStatus @default(ACTIVE)
+  clearTime   DateTime?
+  durationMin Int?
+  clearType   ClearType?
+  createdAt   DateTime    @default(now())
+
+  @@unique([alarmKey, alarmTime])
+  @@index([status, category])
+  @@index([site])
+  @@map("alarms")
+}
+
+model OrphanClear {
+  id           Int        @id @default(autoincrement())
+  alarmKey     String
+  subject      String
+  clearTime    DateTime
+  rawMessageId Int
+  rawMessage   RawMessage @relation(fields: [rawMessageId], references: [id], onDelete: Cascade)
+
+  @@index([alarmKey])
+  @@map("orphan_clears")
+}
+
+/// Classification rules (§6): first match by ascending priority wins.
+model Rule {
+  id       Int      @id @default(autoincrement())
+  pattern  String
+  category Category
+  priority Int
+
+  @@index([priority])
+  @@map("rules")
+}
+
+model Site {
+  site   String  @id
+  region String?
+  owner  String?
+
+  @@map("sites")
+}
+
+model User {
+  id           Int    @id @default(autoincrement())
+  email        String @unique
+  passwordHash String
+  role         Role   @default(VIEWER)
+
+  @@map("users")
+}
+
 model SystemStatus {
   id              Int       @id @default(1)
   lastHistoryId   String?
@@ -18,4 +113,6 @@ model SystemStatus {
   lastError       String?
   lastRunMessages Int       @default(0)
   reprocessDays   Int?
+
+  @@map("system_status")
 }

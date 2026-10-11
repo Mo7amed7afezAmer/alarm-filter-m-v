@@ -14,12 +14,17 @@
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",
     "typecheck": "prisma generate && tsc --noEmit",
-    "generate": "prisma generate"
+    "generate": "prisma generate",
+    "seed": "tsx prisma/seed.ts",
+    "migrate:deploy": "prisma migrate deploy && tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0"
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^2.4.3"
   },
   "devDependencies": {
-    "prisma": "^5.22.0"
+    "@types/bcryptjs": "^2.4.6",
+    "prisma": "^5.22.0",
+    "tsx": "^4.19.2"
   }
 }
