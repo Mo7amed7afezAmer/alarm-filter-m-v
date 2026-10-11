@@ -322,6 +322,113 @@ function Users() {
   );
 }
 
+interface OfficeState {
+  office: string | null;
+  syncedOffice: string | null;
+  offices: string[];
+}
+
+/** "DN/Kafr ElDawar" → { group: "DN", name: "Kafr ElDawar" }. */
+function splitOffice(label: string) {
+  const i = label.lastIndexOf("/");
+  return i > 0
+    ? { group: label.slice(0, i), name: label.slice(i + 1) }
+    : { group: "Other", name: label };
+}
+
+function OfficePicker() {
+  const { data } = usePoll<OfficeState>("/api/settings/office", 15_000);
+  const [choice, setChoice] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (data?.office && !choice) setChoice(data.office);
+  }, [data, choice]);
+
+  const groups = new Map<string, string[]>();
+  for (const label of data?.offices ?? []) {
+    const { group } = splitOffice(label);
+    groups.set(group, [...(groups.get(group) ?? []), label]);
+  }
+  const syncing = !!data?.office && data.office !== data.syncedOffice;
+
+  async function save() {
+    if (!choice || choice === data?.office) return;
+    if (
+      !window.confirm(`Switch the system to office "${choice}"? Pages will show this office only.`)
+    )
+      return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await send("/api/settings/office", "PUT", { office: choice });
+      window.location.reload(); // header + every page re-scope to the new office
+    } catch (e) {
+      setMsg(`Error: ${(e as Error).message}`);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="rounded-xl border-slate-200 shadow-sm">
+      <CardHeader>
+        <CardTitle className="text-base">Office</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          The Gmail label (office) the system reads. All pages show the selected office only; each
+          office keeps its own history.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {data && !data.offices.length ? (
+          <p className="text-sm text-amber-700">
+            No office labels found yet — the worker refreshes the list every 10 minutes (labels
+            under DN/ and DS/).
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <select
+              className="h-9 w-full rounded-md border border-input bg-white px-2 text-sm sm:max-w-xs"
+              value={choice}
+              onChange={(e) => setChoice(e.target.value)}
+            >
+              {!choice && <option value="">Choose an office…</option>}
+              {[...groups].map(([group, labels]) => (
+                <optgroup key={group} label={group}>
+                  {labels.map((l) => (
+                    <option key={l} value={l}>
+                      {splitOffice(l).name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              onClick={() => void save()}
+              disabled={busy || !choice || choice === data?.office}
+            >
+              {busy ? "Switching…" : "Use this office"}
+            </Button>
+          </div>
+        )}
+        {data?.office && (
+          <p className="text-sm">
+            Current: <span className="font-medium">{data.office}</span>{" "}
+            {syncing ? (
+              <span className="text-amber-700">
+                · loading the last 24h of this office (a few minutes)…
+              </span>
+            ) : (
+              <span className="text-emerald-700">· synced</span>
+            )}
+          </p>
+        )}
+        {msg && <p className="text-sm text-red-700">{msg}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SettingsPage() {
   const { role } = useAppConfig();
   if (role !== "ADMIN")
@@ -330,8 +437,9 @@ export default function SettingsPage() {
     <>
       <PageHeader
         title="Settings"
-        subtitle="Classification rules, reprocessing and users (admin only)"
+        subtitle="Office, classification rules, reprocessing and users (admin only)"
       />
+      <OfficePicker />
       <div className="grid gap-4 xl:grid-cols-2 [&>*]:min-w-0">
         <RulesEditor />
         <div className="space-y-4">

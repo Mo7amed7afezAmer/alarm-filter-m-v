@@ -23,6 +23,10 @@ export interface MailSource {
   listSince(after: Date, query?: string): Promise<string[]>;
   /** Subject + internalDate + body, or null if the message no longer exists. */
   getMeta(id: string): Promise<MessageMeta | null>;
+  /** Switch the labels to read (office change). */
+  useLabels?(labels: string[]): void;
+  /** User label names under the given parents, e.g. ["DN/Tanta", "DS/Benha"]. */
+  listLabels?(parents: string[]): Promise<string[]>;
 }
 
 export interface GmailSourceOptions {
@@ -86,7 +90,7 @@ export function createGmailSource(
   });
   auth.setCredentials(JSON.parse(readFileSync(tokenPath, "utf8")));
   const gmail: gmail_v1.Gmail = gmailApi({ version: "v1", auth });
-  const wanted = (opts.labels ?? []).map(labelSearchName).filter(Boolean);
+  let wanted = (opts.labels ?? []).map(labelSearchName).filter(Boolean);
 
   // Label names → ids, resolved once (lazily) and cached.
   let labelIds: Promise<string[] | null> | null = null;
@@ -138,6 +142,24 @@ export function createGmailSource(
   }
 
   return {
+    useLabels(labels) {
+      const next = labels.map(labelSearchName).filter(Boolean);
+      if (next.join(",") !== wanted.join(",")) {
+        wanted = next;
+        labelIds = null; // re-resolve ids for the new labels
+      }
+    },
+
+    async listLabels(parents) {
+      const { data } = await gmail.users.labels.list({ userId: "me" });
+      const prefixes = parents.map((p) => p.toLowerCase() + "/");
+      return (data.labels ?? [])
+        .filter((l) => l.type === "user" && l.name)
+        .map((l) => l.name!)
+        .filter((n) => !prefixes.length || prefixes.some((p) => n.toLowerCase().startsWith(p)))
+        .sort((a, b) => a.localeCompare(b));
+    },
+
     async historySince(startHistoryId) {
       try {
         const ids = await resolveLabels();

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ALARM_TZ, handler, parseQuery, requireUser } from "@/lib/api";
 import { prisma } from "@/lib/db";
+import { getOffice } from "@/lib/office";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ export const GET = handler(async (req: Request) => {
   );
   const since = new Date(now.getTime() - (days + 1) * 86_400_000); // over-fetch, trimmed below
 
+  const office = await getOffice();
   // alarmTime is stored as UTC timestamp without zone.
   const rows = await prisma.$queryRaw<{ day: string; category: string; count: number }[]>`
     SELECT to_char(("alarmTime" AT TIME ZONE 'UTC') AT TIME ZONE ${ALARM_TZ}, 'YYYY-MM-DD') AS day,
@@ -29,6 +31,7 @@ export const GET = handler(async (req: Request) => {
            count(*)::int AS count
     FROM alarms
     WHERE "alarmTime" >= ${since}
+      AND (${office}::text IS NULL OR office = ${office})
     GROUP BY 1, 2`;
 
   const byDay = new Map(dayList.map((d) => [d, { day: d, DOWN: 0, POWER: 0, OTHER: 0 }]));

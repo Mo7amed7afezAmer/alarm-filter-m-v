@@ -121,6 +121,7 @@ describe("required cases (CLAUDE.md §7)", () => {
         clearTime: utc("2026-10-11T13:00:00Z"),
         rawMessageId: m.id,
         consecNbr: null,
+        office: null,
       },
     ]);
   });
@@ -472,6 +473,27 @@ describe("CONSEC_NBR identity (email body)", () => {
       bmail({ clear: true, cell: "A_XX_3_24313_S", consec: "2291814" }, "2026-10-11T18:26:00Z"),
     ]);
     expect(s.stale_clear).toBe(1);
+  });
+});
+
+describe("office tagging", () => {
+  it("alarms and orphans inherit the office of the message they came from", async () => {
+    seq++;
+    const a = repo.addRaw({
+      gmailId: "o1",
+      subject: subj("11-OCT-2026 16:00:00"),
+      receivedAt: utc("2026-10-11T13:01:00Z"),
+      office: "DN/Tanta",
+    });
+    const c = repo.addRaw({
+      gmailId: "o2",
+      subject: subj("01-OCT-2026 09:00:00", { clear: true, site: "GONE" }),
+      receivedAt: utc("2026-10-11T13:02:00Z"),
+      office: "DS/Benha",
+    });
+    await engine.processBatch([a, c]);
+    expect(repo.alarms[0]!.office).toBe("DN/Tanta");
+    expect(repo.orphans[0]!.office).toBe("DS/Benha");
   });
 });
 

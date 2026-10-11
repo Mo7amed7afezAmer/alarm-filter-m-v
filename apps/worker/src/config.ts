@@ -16,6 +16,11 @@ export const config = {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),
+  /** Parent labels whose children are offices offered in /settings. */
+  officeParents: (process.env.OFFICE_LABEL_PARENTS ?? "DN,DS")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
   tokenPath: process.env.GOOGLE_TOKEN_PATH || "/app/secrets/token.json",
   credentialsPath: process.env.GOOGLE_CREDENTIALS_PATH || "/app/secrets/credentials.json",
   cron: process.env.WORKER_CRON || "* * * * *",

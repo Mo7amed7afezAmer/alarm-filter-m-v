@@ -11,6 +11,10 @@ export interface RunDeps {
   maxPerRun: number;
   backfillHours: number;
   query?: string;
+  /** Labels from GMAIL_LABELS — used until an office is chosen in /settings. */
+  defaultLabels?: string[];
+  /** Parents whose child labels are offered as offices (OFFICE_LABEL_PARENTS). */
+  officeParents?: string[];
   log?: (msg: string) => void;
 }
 
@@ -20,6 +24,7 @@ export interface RunResult {
   mode: "history" | "fallback";
   reprocessed: BatchSummary | null;
   processed: BatchSummary;
+  office: string | null;
 }
 
 const LOCK_ID = 42;
@@ -109,12 +114,26 @@ export async function runOnce(deps: RunDeps): Promise<RunResult> {
     log(`reprocess: done ${JSON.stringify(reprocessed)}`);
   }
 
+  // Office = label chosen in /settings (falls back to GMAIL_LABELS). A history position only
+  // means something for the label it was taken on, so an office change forces a fresh backfill.
+  const office = status.officeLabel ?? deps.defaultLabels?.[0] ?? null;
+  source.useLabels?.(office ? [office] : (deps.defaultLabels ?? []));
+  const officeChanged = (office ?? null) !== (status.syncedLabel ?? null);
+  if (officeChanged)
+    log(`office: ${status.syncedLabel ?? "(none)"} → ${office ?? "(all mail)"} — backfilling`);
+  await refreshLabels(deps, log);
+
   // Network work happens outside the DB transaction.
-  const plan = await planSync(source, status.lastHistoryId, (ids) => knownIds(prisma, ids), {
-    maxPerRun: deps.maxPerRun,
-    backfillHours: deps.backfillHours,
-    query: deps.query,
-  });
+  const plan = await planSync(
+    source,
+    officeChanged ? null : status.lastHistoryId,
+    (ids) => knownIds(prisma, ids),
+    {
+      maxPerRun: deps.maxPerRun,
+      backfillHours: deps.backfillHours,
+      query: deps.query,
+    },
+  );
   const { metas, throttled } = await fetchAll(source, plan.ids);
   if (throttled) {
     log(
@@ -127,11 +146,23 @@ export async function runOnce(deps: RunDeps): Promise<RunResult> {
   const processed = await prisma.$transaction(
     async (tx) => {
       await lock(tx);
-      if (metas.length) await tx.rawMessage.createMany({ data: metas, skipDuplicates: true });
+      if (metas.length) {
+        await tx.rawMessage.createMany({
+          data: metas.map((m) => ({ ...m, office })),
+          skipDuplicates: true,
+        });
+      }
       // Includes anything left unprocessed by an earlier crash.
       const pending = await tx.rawMessage.findMany({
         where: { processedAt: null },
-        select: { id: true, gmailId: true, subject: true, receivedAt: true, body: true },
+        select: {
+          id: true,
+          gmailId: true,
+          subject: true,
+          receivedAt: true,
+          body: true,
+          office: true,
+        },
         orderBy: { receivedAt: "asc" },
       });
       const summary = await new MatchingEngine(new PrismaAlarmRepository(tx), {
@@ -143,7 +174,8 @@ export async function runOnce(deps: RunDeps): Promise<RunResult> {
           lastRunAt: new Date(),
           lastRunMessages: metas.length,
           lastError: null,
-          ...(nextHistoryId ? { lastHistoryId: nextHistoryId } : {}),
+          // The office counts as synced once its backlog is fully drained.
+          ...(nextHistoryId ? { lastHistoryId: nextHistoryId, syncedLabel: office } : {}),
         },
       });
       return summary;
@@ -151,7 +183,32 @@ export async function runOnce(deps: RunDeps): Promise<RunResult> {
     { timeout: 5 * 60_000, maxWait: 60_000 },
   );
 
-  return { fetched: metas.length, backlog: plan.backlog, mode: plan.mode, reprocessed, processed };
+  return {
+    fetched: metas.length,
+    backlog: plan.backlog,
+    mode: plan.mode,
+    reprocessed,
+    processed,
+    office,
+  };
+}
+
+let labelsRefreshedAt = 0;
+const LABEL_REFRESH_MS = 10 * 60_000;
+
+/** Keeps system_status.availableLabels (the office list in /settings) fresh. Never fails a run. */
+async function refreshLabels(deps: RunDeps, log: (m: string) => void) {
+  if (!deps.source.listLabels || Date.now() - labelsRefreshedAt < LABEL_REFRESH_MS) return;
+  try {
+    const names = await deps.source.listLabels(deps.officeParents ?? []);
+    await deps.prisma.systemStatus.update({
+      where: { id: 1 },
+      data: { availableLabels: names.map((name) => ({ name })) },
+    });
+    labelsRefreshedAt = Date.now();
+  } catch (err) {
+    log(`could not refresh label list: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 export async function recordError(prisma: PrismaClient, err: unknown): Promise<void> {

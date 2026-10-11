@@ -6,6 +6,7 @@ import { signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 import {
   BellRing,
+  Building2,
   CircleCheck,
   LayoutDashboard,
   LogOut,
@@ -25,9 +26,26 @@ const LINKS: { href: string; label: string; icon: LucideIcon; admin?: boolean }[
   { href: "/settings", label: "Settings", icon: Settings, admin: true },
 ];
 
+/** "DN/Kafr ElDawar" → group "DN" + name "Kafr ElDawar". */
+function OfficePill({ office }: { office: string }) {
+  const i = office.lastIndexOf("/");
+  const group = i > 0 ? office.slice(0, i) : null;
+  const name = i > 0 ? office.slice(i + 1) : office;
+  return (
+    <span
+      className="flex min-w-0 items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-800"
+      title={`Office: ${office}`}
+    >
+      <Building2 className="h-3.5 w-3.5 shrink-0" />
+      {group && <span className="text-sky-600">{group}</span>}
+      <span className="truncate">{name}</span>
+    </span>
+  );
+}
+
 export function Nav() {
   const path = usePathname();
-  const { role, email } = useAppConfig();
+  const { role, email, office } = useAppConfig();
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [path]); // close the mobile menu after navigating
 
@@ -46,6 +64,7 @@ export function Nav() {
           </span>
           <span className="hidden sm:inline">Alarm Filter</span>
         </Link>
+        {office && <OfficePill office={office} />}
 
         <nav className="hidden items-center gap-1 md:flex">
           {links.map(({ href, label, icon: Icon }) => (

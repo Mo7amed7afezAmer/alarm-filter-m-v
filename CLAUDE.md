@@ -286,6 +286,17 @@ Notes:
   `raw_messages.body`, and reads only `GMAIL_LABELS` (history.list per labelId +
   messages.list `(label:a OR label:b)`). User approved wiping raw_messages/alarms/orphan_clears
   (9,188 / 2,516 rows) and re-syncing; rules + users kept. More labels: user to send names.
+- **Office selection (2026-10-12, user request):** offices = Gmail labels under `DN/` and `DS/`
+  (DN: Damanhour, Dumiat, Kafr ElDawar, Kafr ElSheikh, Mansoura, Port Said, Tanta; DS: Benha,
+  Dyrb Negm, Faqous, Huawei, Sadat, Shebin, Zagazig). The worker refreshes the list into
+  `system_status.availableLabels` every 10 min (`OFFICE_LABEL_PARENTS`, default `DN,DS`).
+  An admin picks ONE in /settings → `system_status.officeLabel`; the worker reads only that
+  label, and when it differs from `syncedLabel` it backfills 24h for the new label.
+  `raw_messages/alarms/orphan_clears.office` tag every row; every page/stat/export is scoped
+  to the selected office (history per office is kept). `GMAIL_LABELS` is only the fallback
+  before an office is chosen. Header shows the office pill.
+- After a schema change, RESTART `next dev` — a running dev server keeps the old Prisma client
+  in memory ("Unknown field … on model SystemStatus").
 - On Windows, `prisma generate` fails with EPERM while `next dev` holds the query-engine DLL —
   stop the dev server first.
 - Gmail access uses `@googleapis/gmail` + `google-auth-library` (same API as `googleapis`,

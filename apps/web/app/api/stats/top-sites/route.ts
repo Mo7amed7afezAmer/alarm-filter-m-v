@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { handler, parseQuery, requireUser } from "@/lib/api";
 import { prisma } from "@/lib/db";
+import { officeFilter } from "@/lib/office";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +16,11 @@ export const GET = handler(async (req: Request) => {
   await requireUser();
   const { limit, days } = parseQuery(req, query);
   const since = new Date(Date.now() - days * 86_400_000);
+  const office = await officeFilter();
 
   const top = await prisma.alarm.groupBy({
     by: ["site"],
-    where: { alarmTime: { gte: since } },
+    where: { alarmTime: { gte: since }, ...office },
     _count: { _all: true },
     orderBy: { _count: { site: "desc" } },
     take: limit,
@@ -27,7 +29,7 @@ export const GET = handler(async (req: Request) => {
   const [active, info] = await Promise.all([
     prisma.alarm.groupBy({
       by: ["site"],
-      where: { status: "ACTIVE", site: { in: sites } },
+      where: { status: "ACTIVE", site: { in: sites }, ...office },
       _count: { _all: true },
     }),
     prisma.site.findMany({ where: { site: { in: sites } } }),

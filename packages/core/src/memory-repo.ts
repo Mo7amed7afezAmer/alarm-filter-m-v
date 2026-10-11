@@ -31,6 +31,7 @@ export class MemoryAlarmRepository implements AlarmRepository {
       subject: msg.subject,
       receivedAt: msg.receivedAt,
       body: msg.body ?? null,
+      office: msg.office ?? null,
       parseError: null,
       processed: false,
     };
@@ -110,12 +111,13 @@ export class MemoryAlarmRepository implements AlarmRepository {
   async rawMessagesSince(since: Date) {
     return this.raw
       .filter((r) => r.receivedAt >= since)
-      .map(({ id, gmailId, subject, receivedAt, body }) => ({
+      .map(({ id, gmailId, subject, receivedAt, body, office }) => ({
         id,
         gmailId,
         subject,
         receivedAt,
         body,
+        office,
       }));
   }
 }

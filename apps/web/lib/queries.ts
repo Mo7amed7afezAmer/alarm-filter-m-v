@@ -3,6 +3,7 @@ import type { Prisma } from "@alarm/db";
 import { z } from "zod";
 import { category, dateParam, pagination } from "./api";
 import { prisma } from "./db";
+import { officeFilter } from "./office";
 
 export const activeQuery = z.object({
   category: category.optional(),
@@ -34,7 +35,7 @@ async function sitesInRegion(region: string): Promise<string[]> {
 }
 
 export async function activeWhere(q: z.infer<typeof activeQuery>, now = new Date()) {
-  const where: Prisma.AlarmWhereInput = { status: "ACTIVE" };
+  const where: Prisma.AlarmWhereInput = { status: "ACTIVE", ...(await officeFilter()) };
   if (q.category) where.category = q.category;
   if (q.site) where.site = { contains: q.site, mode: "insensitive" };
   if (q.region) where.AND = [{ site: { in: await sitesInRegion(q.region) } }];
@@ -47,7 +48,11 @@ export async function activeWhere(q: z.infer<typeof activeQuery>, now = new Date
 export async function clearedWhere(q: z.infer<typeof clearedQuery>, now = new Date()) {
   const from = q.from ?? new Date(now.getTime() - 24 * 3_600_000);
   const to = q.to ?? now;
-  const where: Prisma.AlarmWhereInput = { status: "CLEARED", clearTime: { gte: from, lte: to } };
+  const where: Prisma.AlarmWhereInput = {
+    status: "CLEARED",
+    clearTime: { gte: from, lte: to },
+    ...(await officeFilter()),
+  };
   if (q.category) where.category = q.category;
   if (q.site) where.site = { contains: q.site, mode: "insensitive" };
   if (q.region) where.AND = [{ site: { in: await sitesInRegion(q.region) } }];

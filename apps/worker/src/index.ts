@@ -29,11 +29,13 @@ async function tick() {
       maxPerRun: config.maxPerRun,
       backfillHours: config.backfillHours,
       query: config.gmailQuery,
+      defaultLabels: config.gmailLabels,
+      officeParents: config.officeParents,
       log,
     });
     const p = r.processed;
     log(
-      `run ok in ${Date.now() - started}ms mode=${r.mode} fetched=${r.fetched} backlog=${r.backlog} ` +
+      `run ok in ${Date.now() - started}ms office=${r.office ?? "(all)"} mode=${r.mode} fetched=${r.fetched} backlog=${r.backlog} ` +
         `processed=${p.total} created=${p.created + p.superseded} cleared=${p.cleared + p.created_cleared} ` +
         `orphan=${p.orphan} dup=${p.duplicate} huawei=${p.ignored_format} parse_errors=${p.parse_error}`,
     );

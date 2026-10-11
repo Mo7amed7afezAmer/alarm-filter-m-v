@@ -40,12 +40,15 @@ model RawMessage {
   receivedAt  DateTime
   /// Plain-text email body (alarm details incl. CONSEC_NBR, cell name). Null for old rows.
   body        String?
+  /// Office = Gmail label the message was read from, e.g. "DN/Kafr ElDawar".
+  office      String?
   parseError  String?
   processedAt DateTime?
 
   orphanClears OrphanClear[]
 
   @@index([receivedAt])
+  @@index([office])
   @@map("raw_messages")
 }
 
@@ -64,11 +67,13 @@ model Alarm {
   consecNbr   String?     @unique
   cellName    String?
   device      String?
+  office      String?
   createdAt   DateTime    @default(now())
 
   // Not unique any more: different cells can share alarmKey-without-cell + time; identity is consecNbr.
   @@index([alarmKey, alarmTime])
   @@index([status, category])
+  @@index([office, status])
   @@index([site])
   @@map("alarms")
 }
@@ -80,6 +85,7 @@ model OrphanClear {
   clearTime    DateTime
   rawMessageId Int
   consecNbr    String?
+  office       String?
   rawMessage   RawMessage @relation(fields: [rawMessageId], references: [id], onDelete: Cascade)
 
   @@index([alarmKey])
@@ -122,6 +128,12 @@ model SystemStatus {
   lastError       String?
   lastRunMessages Int       @default(0)
   reprocessDays   Int?
+  /// Selected office (Gmail label display name). Chosen in /settings; worker reads it.
+  officeLabel     String?
+  /// Office label the current lastHistoryId belongs to — a change forces a fresh backfill.
+  syncedLabel     String?
+  /// Gmail labels offered in /settings, refreshed by the worker: [{ name }].
+  availableLabels Json?
 
   @@map("system_status")
 }

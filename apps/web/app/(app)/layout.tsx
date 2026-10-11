@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { AppConfigProvider } from "@/components/app-config";
 import { Nav } from "@/components/nav";
 import { authOptions } from "@/lib/auth";
+import { getOffice } from "@/lib/office";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     alertHours: Number(process.env.ALERT_HOURS) || 4,
     role: session.user.role,
     email: session.user.email ?? "",
+    office: await getOffice(),
   };
   return (
     <AppConfigProvider value={config}>

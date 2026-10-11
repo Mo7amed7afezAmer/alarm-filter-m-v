@@ -7,6 +7,8 @@ export interface AppConfig {
   alertHours: number;
   role: "VIEWER" | "ADMIN";
   email: string;
+  /** Selected office (Gmail label), e.g. "DN/Kafr ElDawar". */
+  office: string | null;
 }
 
 const Ctx = createContext<AppConfig | null>(null);

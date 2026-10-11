@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { handler, parseQuery, requireUser } from "@/lib/api";
 import { prisma } from "@/lib/db";
+import { officeFilter } from "@/lib/office";
 
 export const dynamic = "force-dynamic";
 
@@ -19,31 +20,35 @@ export const GET = handler(async (req: Request) => {
   const since = new Date(now.getTime() - days * 86_400_000);
   const day = new Date(now.getTime() - 86_400_000);
   const alertHours = Number(process.env.ALERT_HOURS) || 4;
+  const office = await officeFilter();
 
   const [active, mttr, overdue, status, orphans24h, parseErrors24h, cleared24h] = await Promise.all(
     [
       prisma.alarm.groupBy({
         by: ["category"],
-        where: { status: "ACTIVE" },
+        where: { status: "ACTIVE", ...office },
         _count: { _all: true },
       }),
       // MTTR: EMAIL clears only — AUTO_SUPERSEDED is not a repair.
       prisma.alarm.groupBy({
         by: ["category"],
-        where: { status: "CLEARED", clearType: "EMAIL", clearTime: { gte: since } },
+        where: { status: "CLEARED", clearType: "EMAIL", clearTime: { gte: since }, ...office },
         _avg: { durationMin: true },
         _count: { _all: true },
       }),
       prisma.alarm.count({
         where: {
           status: "ACTIVE",
+          ...office,
           alarmTime: { lte: new Date(now.getTime() - alertHours * 3_600_000) },
         },
       }),
       prisma.systemStatus.findUnique({ where: { id: 1 } }),
-      prisma.orphanClear.count({ where: { clearTime: { gte: day } } }),
-      prisma.rawMessage.count({ where: { receivedAt: { gte: day }, parseError: { not: null } } }),
-      prisma.alarm.count({ where: { status: "CLEARED", clearTime: { gte: day } } }),
+      prisma.orphanClear.count({ where: { clearTime: { gte: day }, ...office } }),
+      prisma.rawMessage.count({
+        where: { receivedAt: { gte: day }, parseError: { not: null }, ...office },
+      }),
+      prisma.alarm.count({ where: { status: "CLEARED", clearTime: { gte: day }, ...office } }),
     ],
   );
 
@@ -69,6 +74,7 @@ export const GET = handler(async (req: Request) => {
     overdue: { count: overdue, alertHours },
     mttr: { days, byCategory: mttrBy },
     last24h: { cleared: cleared24h, orphanClears: orphans24h, parseErrors: parseErrors24h },
+    office: office.office ?? null,
     lastRun: {
       at: lastRunAt,
       ageSec: lastRunAt ? Math.round((now.getTime() - lastRunAt.getTime()) / 1000) : null,

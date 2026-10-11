@@ -24,6 +24,8 @@ export interface AlarmRecord {
   consecNbr: string | null;
   cellName: string | null;
   device: string | null;
+  /** Gmail office label the alarm came from (e.g. "DN/Kafr ElDawar"). */
+  office: string | null;
 }
 
 export type NewAlarm = Omit<AlarmRecord, "id">;
@@ -41,6 +43,7 @@ export interface OrphanClearRecord {
   clearTime: Date;
   rawMessageId: number;
   consecNbr: string | null;
+  office: string | null;
 }
 
 export interface RawMessageInput {
@@ -50,6 +53,8 @@ export interface RawMessageInput {
   receivedAt: Date;
   /** Plain-text body; null/undefined when not fetched. */
   body?: string | null;
+  /** Office label it was read from. */
+  office?: string | null;
 }
 
 /** Storage operations the engine needs. Implementations must run inside one transaction per batch. */
@@ -164,13 +169,13 @@ export class MatchingEngine {
     let outcome: Outcome;
     if (v.format !== "HASH") outcome = "ignored_format";
     else if (v.isClear) outcome = await this.handleClear(v, msg);
-    else outcome = await this.handleAlarm(v);
+    else outcome = await this.handleAlarm(v, msg);
     await this.repo.markProcessed(msg.id, null);
     return outcome;
   }
 
   // §7 A
-  private async handleAlarm(v: HashAlarm): Promise<Outcome> {
+  private async handleAlarm(v: HashAlarm, msg: RawMessageInput): Promise<Outcome> {
     // A.1 duplicate: same CONSEC_NBR, or (no CONSEC_NBR) same key + time.
     const dup = v.consecNbr
       ? await this.repo.findAlarmByConsec(v.consecNbr)
@@ -190,6 +195,7 @@ export class MatchingEngine {
       consecNbr: v.consecNbr,
       cellName: v.cellName,
       device: v.device,
+      office: msg.office ?? null,
     };
 
     // With CONSEC_NBR every alarm is independent (user rule 2026-10-11): same name + site at a
@@ -284,6 +290,7 @@ export class MatchingEngine {
       clearTime,
       rawMessageId: msg.id,
       consecNbr: v.consecNbr,
+      office: msg.office ?? null,
     });
     return "orphan";
   }

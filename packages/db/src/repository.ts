@@ -27,6 +27,7 @@ const alarmSelect = {
   consecNbr: true,
   cellName: true,
   device: true,
+  office: true,
 } as const;
 
 export class PrismaAlarmRepository implements AlarmRepository {
@@ -98,7 +99,14 @@ export class PrismaAlarmRepository implements AlarmRepository {
   async rawMessagesSince(since: Date): Promise<RawMessageInput[]> {
     return this.db.rawMessage.findMany({
       where: { receivedAt: { gte: since } },
-      select: { id: true, gmailId: true, subject: true, receivedAt: true, body: true },
+      select: {
+        id: true,
+        gmailId: true,
+        subject: true,
+        receivedAt: true,
+        body: true,
+        office: true,
+      },
       orderBy: { receivedAt: "asc" },
     });
   }
