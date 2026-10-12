@@ -113,10 +113,14 @@ model Site {
 }
 
 model User {
-  id           Int    @id @default(autoincrement())
-  email        String @unique
-  passwordHash String
-  role         Role   @default(VIEWER)
+  id                  Int       @id @default(autoincrement())
+  email               String    @unique
+  passwordHash        String
+  role                Role      @default(VIEWER)
+  /// Notification preferences (see packages/core/src/notify.ts). Null = defaults (DOWN only).
+  notifyPrefs         Json?
+  /// Notifications for alarms created after this are unread.
+  notificationsSeenAt DateTime?
 
   @@map("users")
 }

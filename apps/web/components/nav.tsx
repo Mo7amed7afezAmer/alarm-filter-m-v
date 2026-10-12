@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppConfig } from "./app-config";
+import { NotificationBell } from "./notification-bell";
 
 const LINKS: { href: string; label: string; icon: LucideIcon; admin?: boolean }[] = [
   { href: "/alarms", label: "Alarms", icon: BellRing },
@@ -82,28 +83,31 @@ export function Nav() {
           ))}
         </nav>
 
-        <div className="ml-auto hidden items-center gap-3 md:flex">
-          <div className="text-right leading-tight">
-            <div className="max-w-[16rem] truncate text-sm text-slate-700">{email}</div>
-            <div className="text-xs capitalize text-slate-500">{role.toLowerCase()}</div>
+        <div className="ml-auto flex items-center gap-1 sm:gap-2">
+          <NotificationBell />
+          <div className="hidden items-center gap-3 md:flex">
+            <div className="text-right leading-tight">
+              <div className="max-w-[16rem] truncate text-sm text-slate-700">{email}</div>
+              <div className="text-xs capitalize text-slate-500">{role.toLowerCase()}</div>
+            </div>
+            <button
+              className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
+              onClick={() => signOut({ callbackUrl: "/login" })}
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </button>
           </div>
+
           <button
-            className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
-            onClick={() => signOut({ callbackUrl: "/login" })}
+            className="rounded-md p-2 text-slate-700 hover:bg-slate-100 md:hidden"
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
+            onClick={() => setOpen((o) => !o)}
           >
-            <LogOut className="h-4 w-4" />
-            Sign out
+            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </div>
-
-        <button
-          className="ml-auto rounded-md p-2 text-slate-700 hover:bg-slate-100 md:hidden"
-          aria-label={open ? "Close menu" : "Open menu"}
-          aria-expanded={open}
-          onClick={() => setOpen((o) => !o)}
-        >
-          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
       </div>
 
       {open && (

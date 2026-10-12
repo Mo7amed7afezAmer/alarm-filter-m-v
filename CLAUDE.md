@@ -295,6 +295,15 @@ Notes:
   `raw_messages/alarms/orphan_clears.office` tag every row; every page/stat/export is scoped
   to the selected office (history per office is kept). `GMAIL_LABELS` is only the fallback
   before an office is chosen. Header shows the office pill.
+- **Notifications (2026-10-12, user request):** in-site only (user choice; browser pop-ups
+  need HTTPS on the LAN). Event = NEW alarm. Per-user prefs in `users.notifyPrefs`
+  (`packages/core/src/notify.ts`: enabled, sound, categories, alarmNames (exact), sites
+  (substring); OR within a filter, AND across, empty = any; default DOWN only). Feed is
+  computed on read: alarms with `createdAt` in the last 24h in the selected office matching
+  prefs; unread = `createdAt > users.notificationsSeenAt` (first time: last 30 min). Bell
+  polls `/api/notifications` every 30s → badge, beep (WebAudio), pop-up card, "(n)" tab title.
+  Prefs page `/notifications` (every user). Caveat: `reprocess` recreates alarms (new
+  createdAt) → they can show up again as unread once.
 - After a schema change, RESTART `next dev` — a running dev server keeps the old Prisma client
   in memory ("Unknown field … on model SystemStatus").
 - On Windows, `prisma generate` fails with EPERM while `next dev` holds the query-engine DLL —
