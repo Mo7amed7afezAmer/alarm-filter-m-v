@@ -32,9 +32,26 @@ export async function getDisplayFilter(): Promise<DisplayFilter> {
   return normalizeDisplayFilter(s?.displayFilter);
 }
 
-/** Prisma condition: current office AND not a hidden type. Combine with others via AND. */
-export async function alarmScope(): Promise<Prisma.AlarmWhereInput> {
-  const [office, f] = await Promise.all([getOffice(), getDisplayFilter()]);
+/** Types the given user hides from their own pages (empty when none / no user). */
+export async function getUserDisplayFilter(userId?: number): Promise<DisplayFilter> {
+  if (!userId) return { hiddenCategories: [], hiddenAlarmNames: [] };
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { displayPrefs: true } });
+  return normalizeDisplayFilter(u?.displayPrefs);
+}
+
+/** Admin (everyone) + personal (this user) hidden types, merged. */
+export async function effectiveDisplayFilter(userId?: number): Promise<DisplayFilter> {
+  const [admin, mine] = await Promise.all([getDisplayFilter(), getUserDisplayFilter(userId)]);
+  return {
+    hiddenCategories: [...new Set([...admin.hiddenCategories, ...mine.hiddenCategories])],
+    hiddenAlarmNames: [...new Set([...admin.hiddenAlarmNames, ...mine.hiddenAlarmNames])],
+  };
+}
+
+/** Prisma condition: current office AND not hidden (by the admin or by this user).
+ *  Combine with other conditions via AND. */
+export async function alarmScope(userId?: number): Promise<Prisma.AlarmWhereInput> {
+  const [office, f] = await Promise.all([getOffice(), effectiveDisplayFilter(userId)]);
   const and: Prisma.AlarmWhereInput[] = [];
   if (office) and.push({ office });
   if (f.hiddenCategories.length) and.push({ category: { notIn: f.hiddenCategories } });
@@ -43,8 +60,8 @@ export async function alarmScope(): Promise<Prisma.AlarmWhereInput> {
 }
 
 /** Same scope as raw-SQL fragments for $queryRaw (alarms table). */
-export async function alarmScopeSql() {
-  const [office, f] = await Promise.all([getOffice(), getDisplayFilter()]);
+export async function alarmScopeSql(userId?: number) {
+  const [office, f] = await Promise.all([getOffice(), effectiveDisplayFilter(userId)]);
   return { office, hiddenCategories: f.hiddenCategories, hiddenAlarmNames: f.hiddenAlarmNames };
 }
 

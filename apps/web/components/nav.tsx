@@ -13,6 +13,7 @@ import {
   Menu,
   RadioTower,
   Settings,
+  UserCog,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -85,6 +86,17 @@ export function Nav() {
 
         <div className="ml-auto flex items-center gap-1 sm:gap-2">
           <NotificationBell />
+          <Link
+            href="/preferences"
+            title="My preferences"
+            aria-label="My preferences"
+            className={cn(
+              "hidden rounded-md p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 md:block",
+              isActive("/preferences") && "bg-slate-100 text-slate-900",
+            )}
+          >
+            <UserCog className="h-5 w-5" />
+          </Link>
           <div className="hidden items-center gap-3 md:flex">
             <div className="text-right leading-tight">
               <div className="max-w-[16rem] truncate text-sm text-slate-700">{email}</div>
@@ -126,6 +138,16 @@ export function Nav() {
                 {label}
               </Link>
             ))}
+            <Link
+              href="/preferences"
+              className={cn(
+                "flex items-center gap-3 rounded-md px-3 py-2.5 text-slate-700 hover:bg-slate-100",
+                isActive("/preferences") && "bg-slate-100 font-medium text-slate-900",
+              )}
+            >
+              <UserCog className="h-4 w-4" />
+              My preferences
+            </Link>
             <div className="mt-1 flex items-center justify-between border-t border-slate-100 px-3 pt-3 text-sm">
               <span className="truncate text-slate-500">
                 {email} · {role.toLowerCase()}

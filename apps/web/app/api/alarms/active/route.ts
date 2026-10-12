@@ -6,9 +6,9 @@ import { activeQuery, activeWhere, alarmSelect, withSiteInfo } from "@/lib/queri
 export const dynamic = "force-dynamic";
 
 export const GET = handler(async (req: Request) => {
-  await requireUser();
+  const session = await requireUser();
   const q = parseQuery(req, activeQuery);
-  const where = await activeWhere(q);
+  const where = await activeWhere(q, Number(session.user.id));
   const [total, rows] = await Promise.all([
     prisma.alarm.count({ where }),
     prisma.alarm.findMany({

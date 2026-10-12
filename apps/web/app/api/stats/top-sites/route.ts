@@ -13,10 +13,10 @@ const query = z.object({
 
 /** Sites with the most alarms raised in the last `days`, with their current active count. */
 export const GET = handler(async (req: Request) => {
-  await requireUser();
+  const session = await requireUser();
   const { limit, days } = parseQuery(req, query);
   const since = new Date(Date.now() - days * 86_400_000);
-  const scope = await alarmScope();
+  const scope = await alarmScope(Number(session.user.id));
 
   const top = await prisma.alarm.groupBy({
     by: ["site"],

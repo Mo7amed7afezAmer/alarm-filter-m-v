@@ -166,7 +166,7 @@ export function NotificationBell() {
                 </button>
               )}
               <Link
-                href="/notifications"
+                href="/preferences#notifications"
                 onClick={() => setOpen(false)}
                 className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100"
                 title="Notification settings"
@@ -180,7 +180,7 @@ export function NotificationBell() {
               <p className="px-4 py-8 text-center text-sm text-slate-500">
                 Notifications are off.{" "}
                 <Link
-                  href="/notifications"
+                  href="/preferences#notifications"
                   className="text-sky-700 underline"
                   onClick={() => setOpen(false)}
                 >

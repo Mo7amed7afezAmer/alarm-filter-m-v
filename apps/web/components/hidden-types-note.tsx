@@ -7,24 +7,37 @@ import { useAppConfig } from "./app-config";
 
 const PAGES = ["/alarms", "/cleared", "/dashboard"];
 
-/** Tells everyone that some alarm types are hidden, so nobody thinks alarms are missing. */
+const plural = (n: number) => `${n} alarm type${n > 1 ? "s" : ""}`;
+
+/** Tells the user that some alarm types are hidden (by the admin and/or by themselves). */
 export function HiddenTypesNote() {
   const path = usePathname();
-  const { hiddenTypes, role } = useAppConfig();
-  if (!hiddenTypes || !PAGES.some((p) => path.startsWith(p))) return null;
+  const { hiddenTypes, myHiddenTypes, role } = useAppConfig();
+  if ((!hiddenTypes && !myHiddenTypes) || !PAGES.some((p) => path.startsWith(p))) return null;
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
       <EyeOff className="h-3.5 w-3.5 shrink-0" />
-      <span>
-        {hiddenTypes} alarm type{hiddenTypes > 1 ? "s are" : " is"} hidden from display.{" "}
-        {role === "ADMIN" ? (
-          <Link href="/settings#display" className="font-medium underline">
-            Change in Settings
+      {hiddenTypes > 0 && (
+        <span>
+          {plural(hiddenTypes)} hidden for everyone
+          {role === "ADMIN" && (
+            <>
+              {" · "}
+              <Link href="/settings#display" className="font-medium underline">
+                Settings
+              </Link>
+            </>
+          )}
+        </span>
+      )}
+      {myHiddenTypes > 0 && (
+        <span>
+          {plural(myHiddenTypes)} hidden by you ·{" "}
+          <Link href="/preferences#display" className="font-medium underline">
+            My preferences
           </Link>
-        ) : (
-          "Ask an admin to change this."
-        )}
-      </span>
+        </span>
+      )}
     </div>
   );
 }

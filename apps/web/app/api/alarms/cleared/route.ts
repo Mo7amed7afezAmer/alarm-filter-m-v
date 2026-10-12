@@ -6,9 +6,9 @@ import { alarmSelect, clearedQuery, clearedWhere, withSiteInfo } from "@/lib/que
 export const dynamic = "force-dynamic";
 
 export const GET = handler(async (req: Request) => {
-  await requireUser();
+  const session = await requireUser();
   const q = parseQuery(req, clearedQuery);
-  const { where, from, to } = await clearedWhere(q);
+  const { where, from, to } = await clearedWhere(q, Number(session.user.id));
   const [total, rows] = await Promise.all([
     prisma.alarm.count({ where }),
     prisma.alarm.findMany({

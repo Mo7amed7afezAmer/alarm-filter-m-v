@@ -1,16 +1,13 @@
 "use client";
 
-import { Eye, EyeOff, Search } from "lucide-react";
 import { useEffect, useState } from "react";
-import { CategoryBadge } from "@/components/badges";
 import { useAppConfig } from "@/components/app-config";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/page-header";
+import { TypesVisibilityEditor } from "@/components/types-visibility-editor";
 import { usePoll } from "@/components/use-poll";
-import { splitAlarmName } from "@/lib/format";
-import { cn } from "@/lib/utils";
 
 type Category = "DOWN" | "POWER" | "OTHER";
 interface Rule {
@@ -340,205 +337,6 @@ function splitOffice(label: string) {
     : { group: "Other", name: label };
 }
 
-type Cat = "DOWN" | "POWER" | "OTHER";
-interface DisplayFilter {
-  hiddenCategories: Cat[];
-  hiddenAlarmNames: string[];
-}
-interface NameRow {
-  name: string;
-  category: Cat;
-  count: number;
-}
-
-function VisibilityButton({
-  shown,
-  onClick,
-  label,
-}: {
-  shown: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={(shown ? "Hide " : "Show ") + label}
-      title={shown ? "Shown — click to hide" : "Hidden — click to show"}
-      className={cn(
-        "flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium",
-        shown
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-          : "border-slate-300 bg-slate-100 text-slate-500 hover:bg-slate-200",
-      )}
-    >
-      {shown ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-      {shown ? "Shown" : "Hidden"}
-    </button>
-  );
-}
-
-function DisplayedTypes() {
-  const current = usePoll<DisplayFilter>("/api/settings/display", 0);
-  const names = usePoll<{ names: NameRow[] }>("/api/alarm-names?all=1", 0);
-  const [filter, setFilter] = useState<DisplayFilter | null>(null);
-  const [q, setQ] = useState("");
-  const [msg, setMsg] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (current.data && !filter) setFilter(current.data);
-  }, [current.data, filter]);
-  if (!filter) return null;
-
-  const catHidden = (c: Cat) => filter.hiddenCategories.includes(c);
-  const nameHidden = (n: string) => filter.hiddenAlarmNames.includes(n);
-  const toggleCat = (c: Cat) =>
-    setFilter({
-      ...filter,
-      hiddenCategories: catHidden(c)
-        ? filter.hiddenCategories.filter((x) => x !== c)
-        : [...filter.hiddenCategories, c],
-    });
-  const toggleName = (n: string) =>
-    setFilter({
-      ...filter,
-      hiddenAlarmNames: nameHidden(n)
-        ? filter.hiddenAlarmNames.filter((x) => x !== n)
-        : [...filter.hiddenAlarmNames, n],
-    });
-  const query = q.trim().toUpperCase();
-  const rows = (names.data?.names ?? []).filter(
-    (n) => !query || n.name.toUpperCase().includes(query),
-  );
-  const changed = JSON.stringify(filter) !== JSON.stringify(current.data);
-
-  async function save() {
-    setBusy(true);
-    setMsg(null);
-    try {
-      await send("/api/settings/display", "PUT", filter);
-      window.location.reload(); // every page + the "hidden" note pick up the new filter
-    } catch (e) {
-      setMsg(`Error: ${(e as Error).message}`);
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Card id="display" className="scroll-mt-20 rounded-xl border-slate-200 shadow-sm">
-      <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1.5">
-          <CardTitle className="text-base">Displayed alarm types</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Hidden types disappear from Alarms, Cleared, Dashboard, exports and notifications for
-            everyone. They are still read and matched in the background — show them again at any
-            time.
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {(filter.hiddenCategories.length > 0 || filter.hiddenAlarmNames.length > 0) && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setFilter({ hiddenCategories: [], hiddenAlarmNames: [] })}
-            >
-              Show all
-            </Button>
-          )}
-          <Button size="sm" onClick={() => void save()} disabled={busy || !changed}>
-            {busy ? "Saving…" : "Save"}
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {msg && <p className="text-sm text-red-700">{msg}</p>}
-        <div>
-          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-            Categories
-          </div>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {(["DOWN", "POWER", "OTHER"] as Cat[]).map((c) => (
-              <div
-                key={c}
-                className={cn(
-                  "flex items-center justify-between rounded-lg border px-3 py-2",
-                  catHidden(c) ? "border-slate-200 bg-slate-50" : "border-slate-200",
-                )}
-              >
-                <CategoryBadge value={c} />
-                <VisibilityButton shown={!catHidden(c)} onClick={() => toggleCat(c)} label={c} />
-              </div>
-            ))}
-          </div>
-        </div>
-        <div>
-          <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Alarm names (last 30 days in this office)
-            </span>
-            <div className="relative sm:w-64">
-              <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search"
-                className="bg-white pl-8"
-              />
-            </div>
-          </div>
-          <div className="max-h-96 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
-            {rows.map((n) => {
-              const byCat = catHidden(n.category);
-              const hidden = byCat || nameHidden(n.name);
-              const { name, prefix } = splitAlarmName(n.name);
-              return (
-                <div
-                  key={n.name}
-                  className={cn("flex items-center gap-3 px-3 py-2", hidden && "bg-slate-50")}
-                >
-                  <span
-                    className={cn(
-                      "min-w-0 flex-1 truncate text-sm",
-                      hidden ? "text-slate-400 line-through" : "text-slate-900",
-                    )}
-                    title={n.name}
-                  >
-                    {name}
-                    {prefix && (
-                      <span className="ml-1.5 font-mono text-[10px] text-slate-400 no-underline">
-                        {prefix}
-                      </span>
-                    )}
-                  </span>
-                  <CategoryBadge value={n.category} />
-                  <span className="hidden w-10 text-right text-xs tabular-nums text-slate-400 sm:inline">
-                    {n.count}
-                  </span>
-                  {byCat ? (
-                    <span className="w-[5.5rem] text-right text-[11px] text-slate-400">
-                      via category
-                    </span>
-                  ) : (
-                    <VisibilityButton
-                      shown={!nameHidden(n.name)}
-                      onClick={() => toggleName(n.name)}
-                      label={n.name}
-                    />
-                  )}
-                </div>
-              );
-            })}
-            {names.data && !rows.length && (
-              <p className="px-3 py-6 text-center text-sm text-slate-500">No alarm names match.</p>
-            )}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 function OfficePicker() {
   const { data } = usePoll<OfficeState>("/api/settings/office", 15_000);
   const [choice, setChoice] = useState("");
@@ -643,7 +441,7 @@ export default function SettingsPage() {
         subtitle="Office, classification rules, reprocessing and users (admin only)"
       />
       <OfficePicker />
-      <DisplayedTypes />
+      <TypesVisibilityEditor mode="admin" />
       <div className="grid gap-4 xl:grid-cols-2 [&>*]:min-w-0">
         <RulesEditor />
         <div className="space-y-4">

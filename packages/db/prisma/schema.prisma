@@ -121,6 +121,8 @@ model User {
   notifyPrefs         Json?
   /// Notifications for alarms created after this are unread.
   notificationsSeenAt DateTime?
+  /// Alarm types this user hides from THEIR pages only: { hiddenCategories, hiddenAlarmNames }.
+  displayPrefs        Json?
 
   @@map("users")
 }

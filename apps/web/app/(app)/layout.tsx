@@ -6,7 +6,7 @@ import { HiddenTypesNote } from "@/components/hidden-types-note";
 import { Nav } from "@/components/nav";
 import { authOptions } from "@/lib/auth";
 import { getOffice } from "@/lib/office";
-import { getDisplayFilter, hiddenCount } from "@/lib/visibility";
+import { getDisplayFilter, getUserDisplayFilter, hiddenCount } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +20,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     email: session.user.email ?? "",
     office: await getOffice(),
     hiddenTypes: hiddenCount(await getDisplayFilter()),
+    myHiddenTypes: hiddenCount(await getUserDisplayFilter(Number(session.user.id))),
   };
   return (
     <AppConfigProvider value={config}>

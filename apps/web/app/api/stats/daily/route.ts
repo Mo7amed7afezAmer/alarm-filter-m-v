@@ -15,7 +15,7 @@ function localDay(d: Date): string {
 
 /** Alarms raised per local day and category (by alarmTime). */
 export const GET = handler(async (req: Request) => {
-  await requireUser();
+  const session = await requireUser();
   const { days } = parseQuery(req, query);
   const now = new Date();
   const dayList = Array.from({ length: days }, (_, i) =>
@@ -23,7 +23,9 @@ export const GET = handler(async (req: Request) => {
   );
   const since = new Date(now.getTime() - (days + 1) * 86_400_000); // over-fetch, trimmed below
 
-  const { office, hiddenCategories, hiddenAlarmNames } = await alarmScopeSql();
+  const { office, hiddenCategories, hiddenAlarmNames } = await alarmScopeSql(
+    Number(session.user.id),
+  );
   // alarmTime is stored as UTC timestamp without zone.
   const rows = await prisma.$queryRaw<{ day: string; category: string; count: number }[]>`
     SELECT to_char(("alarmTime" AT TIME ZONE 'UTC') AT TIME ZONE ${ALARM_TZ}, 'YYYY-MM-DD') AS day,

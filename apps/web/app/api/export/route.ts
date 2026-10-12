@@ -26,15 +26,23 @@ function local(d: Date | null): string {
 }
 
 export const GET = handler(async (req: Request) => {
-  await requireUser();
+  const session = await requireUser();
   const status = new URL(req.url).searchParams.get("status");
   if (status !== "active" && status !== "cleared")
     throw new HttpError(400, "status must be active or cleared");
 
   const where =
     status === "active"
-      ? await activeWhere(parseQuery(req, activeQuery.extend({ status: z.string() })))
-      : (await clearedWhere(parseQuery(req, clearedQuery.extend({ status: z.string() })))).where;
+      ? await activeWhere(
+          parseQuery(req, activeQuery.extend({ status: z.string() })),
+          Number(session.user.id),
+        )
+      : (
+          await clearedWhere(
+            parseQuery(req, clearedQuery.extend({ status: z.string() })),
+            Number(session.user.id),
+          )
+        ).where;
 
   const count = await prisma.alarm.count({ where });
   if (count > MAX_ROWS)

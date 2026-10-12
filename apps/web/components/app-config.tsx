@@ -11,6 +11,8 @@ export interface AppConfig {
   office: string | null;
   /** Number of alarm types (categories + names) hidden in /settings. */
   hiddenTypes: number;
+  /** Number of alarm types this user hides from their own pages (/preferences). */
+  myHiddenTypes: number;
 }
 
 const Ctx = createContext<AppConfig | null>(null);

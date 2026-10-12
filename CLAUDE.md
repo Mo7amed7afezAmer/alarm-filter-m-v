@@ -311,6 +311,12 @@ Notes:
   chart via `alarmScopeSql()`), export and the notification feed. User filters are AND-ed on
   top, so they cannot un-hide. Data is still ingested/matched; pages show an amber
   "N alarm types hidden" note. `/api/alarm-names?all=1` includes hidden names (with `hidden`).
+- **Personal hidden types (2026-10-12, user request):** every user can also hide types from
+  THEIR pages only → `users.displayPrefs` (same shape), edited on `/preferences` (renamed from
+  /notifications, which redirects; header link "My preferences"). `alarmScope(userId)` merges
+  admin + personal; all routes pass `Number(session.user.id)`. Personal hiding also filters
+  that user's notification feed. Admin-hidden types show as locked in the personal editor
+  (shared component `components/types-visibility-editor.tsx`, mode admin|personal).
 - After a schema change, RESTART `next dev` — a running dev server keeps the old Prisma client
   in memory ("Unknown field … on model SystemStatus").
 - On Windows, `prisma generate` fails with EPERM while `next dev` holds the query-engine DLL —

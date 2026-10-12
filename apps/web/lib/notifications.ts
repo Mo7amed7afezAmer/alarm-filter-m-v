@@ -28,7 +28,7 @@ export async function notificationFeed(userId: number, now = new Date()) {
 
   const recent = prefs.enabled
     ? await prisma.alarm.findMany({
-        where: { AND: [await alarmScope(), { createdAt: { gte: since } }] },
+        where: { AND: [await alarmScope(userId), { createdAt: { gte: since } }] },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: SCAN_LIMIT,
         select: {

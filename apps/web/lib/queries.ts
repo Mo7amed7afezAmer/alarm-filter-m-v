@@ -36,10 +36,11 @@ async function sitesInRegion(region: string): Promise<string[]> {
 
 export async function activeWhere(
   q: z.infer<typeof activeQuery>,
+  userId?: number,
   now = new Date(),
 ): Promise<Prisma.AlarmWhereInput> {
   // Office + hidden types first; user filters are AND-ed on top (they cannot un-hide a type).
-  const and: Prisma.AlarmWhereInput[] = [await alarmScope(), { status: "ACTIVE" }];
+  const and: Prisma.AlarmWhereInput[] = [await alarmScope(userId), { status: "ACTIVE" }];
   if (q.category) and.push({ category: q.category });
   if (q.site) and.push({ site: { contains: q.site, mode: "insensitive" } });
   if (q.region) and.push({ site: { in: await sitesInRegion(q.region) } });
@@ -49,11 +50,15 @@ export async function activeWhere(
 }
 
 /** Default window: last 24h by clearTime. */
-export async function clearedWhere(q: z.infer<typeof clearedQuery>, now = new Date()) {
+export async function clearedWhere(
+  q: z.infer<typeof clearedQuery>,
+  userId?: number,
+  now = new Date(),
+) {
   const from = q.from ?? new Date(now.getTime() - 24 * 3_600_000);
   const to = q.to ?? now;
   const and: Prisma.AlarmWhereInput[] = [
-    await alarmScope(),
+    await alarmScope(userId),
     { status: "CLEARED", clearTime: { gte: from, lte: to } },
   ];
   if (q.category) and.push({ category: q.category });

@@ -6,7 +6,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 const url = process.env.TEST_DATABASE_URL;
 const PREFIX = "ZZ-APITEST";
 
-const session = vi.hoisted(() => ({ current: null as null | { user: { role: string } } }));
+const session = vi.hoisted(() => ({
+  current: null as null | { user: { role: string; id?: string } },
+}));
 vi.mock("next-auth", async (orig) => ({
   ...(await orig<typeof import("next-auth")>()),
   getServerSession: async () => session.current,
@@ -159,6 +161,29 @@ describe.skipIf(!url)("API integration", () => {
         where: { id: 1 },
         data: { displayFilter: { hiddenCategories: [], hiddenAlarmNames: [] } },
       });
+    });
+  });
+
+  describe("personal hidden types (My preferences)", () => {
+    it("hide only for the user who chose them", async () => {
+      const me = await prisma.user.create({
+        data: {
+          email: "zz-apitest-hider@local",
+          passwordHash: "x",
+          displayPrefs: { hiddenCategories: ["POWER"], hiddenAlarmNames: [] },
+        },
+      });
+      try {
+        session.current = { user: { role: "VIEWER", id: String(me.id) } };
+        const mine = await get(activeGET, `/api/alarms/active?site=${PREFIX}`);
+        expect(mine.body.items.map((a: { category: string }) => a.category)).toEqual(["DOWN"]);
+
+        session.current = { user: { role: "VIEWER" } }; // someone else
+        const theirs = await get(activeGET, `/api/alarms/active?site=${PREFIX}`);
+        expect(theirs.body.total).toBe(2);
+      } finally {
+        await prisma.user.delete({ where: { id: me.id } });
+      }
     });
   });
 
