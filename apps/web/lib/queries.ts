@@ -3,7 +3,7 @@ import type { Prisma } from "@alarm/db";
 import { z } from "zod";
 import { category, dateParam, pagination } from "./api";
 import { prisma } from "./db";
-import { officeFilter } from "./office";
+import { alarmScope } from "./visibility";
 
 export const activeQuery = z.object({
   category: category.optional(),
@@ -34,28 +34,32 @@ async function sitesInRegion(region: string): Promise<string[]> {
   return rows.map((r) => r.site);
 }
 
-export async function activeWhere(q: z.infer<typeof activeQuery>, now = new Date()) {
-  const where: Prisma.AlarmWhereInput = { status: "ACTIVE", ...(await officeFilter()) };
-  if (q.category) where.category = q.category;
-  if (q.site) where.site = { contains: q.site, mode: "insensitive" };
-  if (q.region) where.AND = [{ site: { in: await sitesInRegion(q.region) } }];
+export async function activeWhere(
+  q: z.infer<typeof activeQuery>,
+  now = new Date(),
+): Promise<Prisma.AlarmWhereInput> {
+  // Office + hidden types first; user filters are AND-ed on top (they cannot un-hide a type).
+  const and: Prisma.AlarmWhereInput[] = [await alarmScope(), { status: "ACTIVE" }];
+  if (q.category) and.push({ category: q.category });
+  if (q.site) and.push({ site: { contains: q.site, mode: "insensitive" } });
+  if (q.region) and.push({ site: { in: await sitesInRegion(q.region) } });
   if (q.minHours !== undefined)
-    where.alarmTime = { lte: new Date(now.getTime() - q.minHours * 3_600_000) };
-  return where;
+    and.push({ alarmTime: { lte: new Date(now.getTime() - q.minHours * 3_600_000) } });
+  return { AND: and };
 }
 
 /** Default window: last 24h by clearTime. */
 export async function clearedWhere(q: z.infer<typeof clearedQuery>, now = new Date()) {
   const from = q.from ?? new Date(now.getTime() - 24 * 3_600_000);
   const to = q.to ?? now;
-  const where: Prisma.AlarmWhereInput = {
-    status: "CLEARED",
-    clearTime: { gte: from, lte: to },
-    ...(await officeFilter()),
-  };
-  if (q.category) where.category = q.category;
-  if (q.site) where.site = { contains: q.site, mode: "insensitive" };
-  if (q.region) where.AND = [{ site: { in: await sitesInRegion(q.region) } }];
+  const and: Prisma.AlarmWhereInput[] = [
+    await alarmScope(),
+    { status: "CLEARED", clearTime: { gte: from, lte: to } },
+  ];
+  if (q.category) and.push({ category: q.category });
+  if (q.site) and.push({ site: { contains: q.site, mode: "insensitive" } });
+  if (q.region) and.push({ site: { in: await sitesInRegion(q.region) } });
+  const where: Prisma.AlarmWhereInput = { AND: and };
   return { where, from, to };
 }
 

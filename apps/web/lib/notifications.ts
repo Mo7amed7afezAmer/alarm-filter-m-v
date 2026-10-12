@@ -2,7 +2,7 @@
 // Computed on read — no per-user notification rows to keep in sync.
 import { matchesPrefs, normalizePrefs, type NotifyPrefs } from "@alarm/core";
 import { prisma } from "./db";
-import { officeFilter } from "./office";
+import { alarmScope } from "./visibility";
 
 const WINDOW_MS = 24 * 3_600_000;
 const SCAN_LIMIT = 2_000;
@@ -28,7 +28,7 @@ export async function notificationFeed(userId: number, now = new Date()) {
 
   const recent = prefs.enabled
     ? await prisma.alarm.findMany({
-        where: { createdAt: { gte: since }, ...(await officeFilter()) },
+        where: { AND: [await alarmScope(), { createdAt: { gte: since } }] },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: SCAN_LIMIT,
         select: {

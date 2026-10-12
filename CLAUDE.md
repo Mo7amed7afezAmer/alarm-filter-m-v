@@ -304,6 +304,13 @@ Notes:
   polls `/api/notifications` every 30s → badge, beep (WebAudio), pop-up card, "(n)" tab title.
   Prefs page `/notifications` (every user). Caveat: `reprocess` recreates alarms (new
   createdAt) → they can show up again as unread once.
+- **Hidden alarm types (2026-10-12, user request):** admin hides whole categories and/or exact
+  alarm names in /settings ("Displayed alarm types") → `system_status.displayFilter`
+  `{hiddenCategories, hiddenAlarmNames}`, global (all users, all offices). `lib/visibility.ts`
+  `alarmScope()` = office AND not hidden; used by every alarm list, stat (incl. raw-SQL daily
+  chart via `alarmScopeSql()`), export and the notification feed. User filters are AND-ed on
+  top, so they cannot un-hide. Data is still ingested/matched; pages show an amber
+  "N alarm types hidden" note. `/api/alarm-names?all=1` includes hidden names (with `hidden`).
 - After a schema change, RESTART `next dev` — a running dev server keeps the old Prisma client
   in memory ("Unknown field … on model SystemStatus").
 - On Windows, `prisma generate` fails with EPERM while `next dev` holds the query-engine DLL —

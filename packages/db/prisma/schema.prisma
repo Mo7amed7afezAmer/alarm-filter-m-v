@@ -138,6 +138,9 @@ model SystemStatus {
   syncedLabel     String?
   /// Gmail labels offered in /settings, refreshed by the worker: [{ name }].
   availableLabels Json?
+  /// Alarm types hidden from every page/stat/export (admin, /settings):
+  /// { hiddenCategories: Category[], hiddenAlarmNames: string[] }. Data is still stored.
+  displayFilter   Json?
 
   @@map("system_status")
 }

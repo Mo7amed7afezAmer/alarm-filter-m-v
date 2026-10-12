@@ -115,6 +115,53 @@ describe.skipIf(!url)("API integration", () => {
     });
   });
 
+  describe("hidden alarm types (display settings)", () => {
+    afterAll(async () => {
+      await prisma.systemStatus.updateMany({
+        data: { displayFilter: { hiddenCategories: [], hiddenAlarmNames: [] } },
+      });
+    });
+
+    it("hidden category and hidden names disappear from the active list", async () => {
+      session.current = { user: { role: "VIEWER" } };
+      await prisma.systemStatus.upsert({
+        where: { id: 1 },
+        update: { displayFilter: { hiddenCategories: ["POWER"], hiddenAlarmNames: [] } },
+        create: { id: 1, displayFilter: { hiddenCategories: ["POWER"], hiddenAlarmNames: [] } },
+      });
+      const r1 = await get(activeGET, `/api/alarms/active?site=${PREFIX}`);
+      expect(r1.body.items.map((a: { category: string }) => a.category)).toEqual(["DOWN"]);
+      // Filtering by a hidden category cannot bring it back.
+      const r2 = await get(activeGET, `/api/alarms/active?site=${PREFIX}&category=POWER`);
+      expect(r2.body.total).toBe(0);
+
+      await prisma.systemStatus.update({
+        where: { id: 1 },
+        data: {
+          displayFilter: { hiddenCategories: [], hiddenAlarmNames: ["S_D_N_BTS O&M LINK FAILURE"] },
+        },
+      });
+      const r3 = await get(activeGET, `/api/alarms/active?site=${PREFIX}`);
+      expect(r3.body.items.map((a: { site: string }) => a.site)).toEqual([`${PREFIX}-B`]);
+    });
+
+    it("summary counts exclude hidden types", async () => {
+      session.current = { user: { role: "VIEWER" } };
+      await prisma.systemStatus.update({
+        where: { id: 1 },
+        data: {
+          displayFilter: { hiddenCategories: ["DOWN", "POWER", "OTHER"], hiddenAlarmNames: [] },
+        },
+      });
+      const { body } = await get(summaryGET, "/api/stats/summary");
+      expect(body.active.total).toBe(0);
+      await prisma.systemStatus.update({
+        where: { id: 1 },
+        data: { displayFilter: { hiddenCategories: [], hiddenAlarmNames: [] } },
+      });
+    });
+  });
+
   describe("GET /api/stats/summary", () => {
     it("401 without a session", async () => {
       session.current = null;

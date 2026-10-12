@@ -9,6 +9,8 @@ export interface AppConfig {
   email: string;
   /** Selected office (Gmail label), e.g. "DN/Kafr ElDawar". */
   office: string | null;
+  /** Number of alarm types (categories + names) hidden in /settings. */
+  hiddenTypes: number;
 }
 
 const Ctx = createContext<AppConfig | null>(null);
