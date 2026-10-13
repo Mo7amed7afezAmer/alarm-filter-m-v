@@ -30,3 +30,5 @@ tests/fixtures/*.rar
 tests/fixtures/*.xlsx
 SiteMaster_*.xlsx
 .next-*/
+test-results/
+playwright-report/

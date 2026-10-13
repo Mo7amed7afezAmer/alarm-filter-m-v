@@ -16,6 +16,10 @@ const nextConfig = {
     // Loaded from node_modules at runtime, never bundled: node-unrar-js reads its .wasm next
     // to its own files; exceljs is large and CommonJS.
     serverComponentsExternalPackages: ["node-unrar-js", "exceljs"],
+    // node-unrar-js loads its .wasm with fs at runtime — file tracing cannot see that.
+    outputFileTracingIncludes: {
+      "/api/hourly-reports/**": ["../../node_modules/.pnpm/node-unrar-js@*/node_modules/node-unrar-js/**/*.wasm"],
+    },
   },
   transpilePackages: ["@alarm/core"],
 };

@@ -344,6 +344,36 @@ Mobile: list + read-only table with the same filters.
 
 **Env:** `HOURLY_MAX_RAR_MB=25`, `HOURLY_MAX_EXTRACT_MB=100`, `HOURLY_CACHE_MIN=30`.
 
+**As built (Phase 12, 2026-10-13) — built on Route Handlers, no separate api service:**
+- Pure pipeline in `packages/core/src/hourly/` (validate, extract, parse, enrich, normalize,
+  filter, diff, exportXlsx, siteMaster). `@alarm/core` re-exports only the browser-safe part;
+  the server part is `@alarm/core/hourly`. exceljs / node-unrar-js are *optional peer* deps
+  of core so the worker image does not grow.
+- Server in `apps/web`: `lib/gmail.ts` (list + attachment, worker's OAuth files;
+  `HOURLY_GMAIL_MOCK_DIR` serves local .rar files), `lib/hourlyCache.ts` (LRU + in-flight
+  promise + status, **per Next.js instance**), `lib/hourly.ts`; routes under
+  `app/api/hourly-reports/**`, `app/api/site-master/**`, `app/api/hourly-normalizations`
+  (paths without `/v1`), all `runtime = "nodejs"`, responses `{data, meta}` / `{error}`.
+- Roles: new `OPERATOR` (viewer < operator < admin). Process = operator; Site Master and
+  normalizations = admin. A report nobody processed yet returns 409 to viewers; once
+  processed, a cold cache re-processes transparently for everyone.
+- Extraction: headers listed with node-unrar-js first (pre-check), then `unrar x -o+ -p- -y`
+  when the binary exists, else node-unrar-js; post-check on disk; temp dir removed in finally.
+- `apps/web/Dockerfile` uses `node:20-bookworm-slim` (deviation from §4 Alpine): Alpine has
+  no `unrar` package; Debian non-free has `unrar` 6.21 (verified).
+- The /hourly page loads all rows of a report (rows API, pages of 500) and filters/sorts in
+  the browser with the same core functions; export goes through the API with the same
+  filters + visible columns. Report list paging is `page`, mapped to Gmail page tokens.
+- Deviations found in the real files: Environmental *Alarm Text* is NOT constant (EXTERNAL
+  AL n, FIRE ALARM, … in a minority of rows) — alarmName is still Supplementary Information,
+  falling back to Alarm Text when empty. Normalization rules replace whole words, and an
+  `alarmName` rule also fixes Alarm Text / Supplementary Information.
+- Fixture counts (tests/fixtures/NSN Update_Output.rar, 13-OCT-2026 ~07:00): data rows
+  2G_Down 529, 3G_Down 434, 4G_Down 438, 5G_Down 2, Environmental 1394, HW 35; 856 unique
+  Down rows after dedupe (181 SYNCHRONIZATION rows merged across 2G/3G/4G); 2,285 rows total.
+  The counts in the task brief (743/499/469/3/1289/45) belong to a different report.
+  SiteMaster fixture: 138 rows, 0970DE three times → 136 imported, 2 skipped.
+
 ## 12. Current Status
 - [x] Phase 0 — repo, tooling, Docker skeleton (db healthy on Docker 29.8.2 / WSL2)
 - [x] Phase 1 — Gmail OAuth + sample fetch (token.json saved; 300 samples in samples/subjects.txt)
@@ -360,6 +390,15 @@ Mobile: list + read-only table with the same filters.
       7 integration tests on alarms_test; login page at /login)
 - [ ] Phase 7 — UI pages
 - [ ] Phase 8 — full compose, backups, LAN access, 24h parallel run, RUNBOOK
+      (RUNBOOK.md started with the hourly section; `apps/web/Dockerfile` exists but `web` is
+      not in docker-compose.yml yet — it must mount token.json + credentials.json read-only)
+- [ ] Phase 9 — PWA + web push
+- [ ] Phase 10 — Cloudflare Tunnel remote access
+- [ ] Phase 11 — Expo mobile app (optional)
+- [x] Phase 12 — Hourly reports (stateless, §14 "As built"): /hourly, /hourly/[gmailId],
+      /hourly/compare, /settings/site-master; 133 unit tests green on the real fixtures.
+      DB-backed route tests + Playwright smoke written but NOT yet run (Docker/WSL hung on
+      2026-10-13 during the session) — run them once Docker is back (RUNBOOK.md → Tests).
 Notes:
 - pnpm is NOT installed globally (§2). Run it via corepack: `corepack pnpm <cmd>`
   (version pinned by `packageManager` in root package.json). `pnpm dlx` is broken on this

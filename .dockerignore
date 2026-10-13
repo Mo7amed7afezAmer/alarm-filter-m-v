@@ -21,3 +21,9 @@ samples
 docker-compose*.yml
 Makefile
 *.md
+
+# real network data used only by tests
+tests/fixtures
+**/.next-*
+**/test-results
+**/playwright-report
