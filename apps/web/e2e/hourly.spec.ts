@@ -14,7 +14,7 @@ test("process, filter and export an hourly report", async ({ page }) => {
   await expect(row).toBeVisible();
   const process = row.getByRole("button", { name: /process|retry/i });
   if (await process.isVisible()) await process.click();
-  await expect(row.getByText(/2,285 rows/)).toBeVisible({ timeout: 120_000 });
+  await expect(row.getByText(/2,285 rows/)).toBeVisible();
 
   await row.getByRole("link", { name: "Open" }).click();
   await expect(page.getByTestId("row-count")).toContainText("of 2,285 rows");

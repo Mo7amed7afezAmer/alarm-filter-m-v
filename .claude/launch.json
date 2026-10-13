@@ -4,8 +4,12 @@
     {
       "name": "web",
       "runtimeExecutable": "corepack",
-      "runtimeArgs": ["pnpm", "--filter", "@alarm/web", "dev"],
-      "port": 3000
+      "runtimeArgs": ["pnpm", "--filter", "@alarm/web", "exec", "next", "dev", "-H", "0.0.0.0"],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "NEXT_DIST_DIR": ".next-preview"
+      }
     },
     {
       "name": "web-hourly-mock",

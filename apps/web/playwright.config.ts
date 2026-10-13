@@ -8,8 +8,9 @@ const baseURL = `http://localhost:${PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",
-  timeout: 180_000,
-  expect: { timeout: 60_000 },
+  // `next dev` compiles every route on first hit — minutes on a busy Windows box.
+  timeout: 600_000,
+  expect: { timeout: 180_000 },
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],
