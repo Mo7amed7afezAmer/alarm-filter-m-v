@@ -24,7 +24,8 @@
     "gmail:auth": "tsx scripts/gmail-auth.ts",
     "gmail:samples": "tsx scripts/fetch-samples.ts",
     "gmail:bodies": "tsx scripts/fetch-bodies.ts",
-    "parse:samples": "tsx scripts/parse-samples.ts"
+    "parse:samples": "tsx scripts/parse-samples.ts",
+    "test:e2e": "pnpm --filter @alarm/web exec playwright test"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
