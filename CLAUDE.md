@@ -396,9 +396,11 @@ Mobile: list + read-only table with the same filters.
 - [ ] Phase 10 — Cloudflare Tunnel remote access
 - [ ] Phase 11 — Expo mobile app (optional)
 - [x] Phase 12 — Hourly reports (stateless, §14 "As built"): /hourly, /hourly/[gmailId],
-      /hourly/compare, /settings/site-master; 133 unit tests green on the real fixtures.
-      DB-backed route tests + Playwright smoke written but NOT yet run (Docker/WSL hung on
-      2026-10-13 during the session) — run them once Docker is back (RUNBOOK.md → Tests).
+      /hourly/compare, /settings/site-master. Verified 2026-10-13: vitest 151 tests incl. 7
+      hourly route tests on alarms_test, and the Playwright smoke (`corepack pnpm test:e2e`,
+      ~5 min — dev-mode cold compiles). e2e DB seeding runs in a child node process
+      (`e2e/db.mjs`): importing ESM `@alarm/core/hourly` through Playwright's loader hangs.
+      `apps/web/Dockerfile` not built yet.
 Notes:
 - pnpm is NOT installed globally (§2). Run it via corepack: `corepack pnpm <cmd>`
   (version pinned by `packageManager` in root package.json). `pnpm dlx` is broken on this
