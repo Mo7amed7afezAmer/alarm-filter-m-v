@@ -9,11 +9,27 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./hourly": {
+      "types": "./dist/hourly/index.d.ts",
+      "default": "./dist/hourly/index.js"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
+  },
+  "peerDependencies": {
+    "exceljs": "4.4.0",
+    "node-unrar-js": "2.0.2"
+  },
+  "peerDependenciesMeta": {
+    "exceljs": { "optional": true },
+    "node-unrar-js": { "optional": true }
+  },
+  "devDependencies": {
+    "exceljs": "4.4.0",
+    "node-unrar-js": "2.0.2"
   }
 }

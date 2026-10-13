@@ -9,7 +9,7 @@
  */
 import { PrismaClient, type Category } from "@prisma/client";
 // Source import (tsx): the migrate image ships packages/core/src but never builds it.
-import { DEFAULT_HOURLY_NORMALIZATIONS } from "../../core/src/hourly.js";
+import { DEFAULT_HOURLY_NORMALIZATIONS } from "../../core/src/hourly/normalize.js";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
