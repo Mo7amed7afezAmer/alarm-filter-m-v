@@ -368,6 +368,17 @@ Mobile: list + read-only table with the same filters.
   AL n, FIRE ALARM, … in a minority of rows) — alarmName is still Supplementary Information,
   falling back to Alarm Text when empty. Normalization rules replace whole words, and an
   `alarmName` rule also fixes Alarm Text / Supplementary Information.
+- **Plain .xlsx attachments (2026-10-13, user request):** some mails carry
+  `NSN Update_Output.xlsx` directly instead of a .rar. Attachment pick: .rar, else .xlsx.
+  `.xlsx` path: extension, ZIP signature `50 4B 03 04`, ≤ HOURLY_MAX_RAR_MB, declared
+  uncompressed size (ZIP central directory) ≤ HOURLY_MAX_EXTRACT_MB → parsed directly, no
+  temp dir. Same rows as the RAR (test `process.test.ts`). Mock dir serves .xlsx too.
+- **Table as image (2026-10-13, user request):** "Image for WhatsApp" on /hourly/[gmailId]
+  (`components/hourly/table-image.tsx`): filtered rows drawn on canvas (office colors, title
+  = report time, subtitle = active filters), split into 25/40/60/100 rows per PNG; compact
+  column set by default or the table's visible columns. Share = Web Share API with files
+  (phone + HTTPS only, e.g. Phase 10 tunnel); otherwise Download (and Copy image when the
+  page is a secure context). No new dependency.
 - Fixture counts (tests/fixtures/NSN Update_Output.rar, 13-OCT-2026 ~07:00): data rows
   2G_Down 529, 3G_Down 434, 4G_Down 438, 5G_Down 2, Environmental 1394, HW 35; 856 unique
   Down rows after dedupe (181 SYNCHRONIZATION rows merged across 2G/3G/4G); 2,285 rows total.

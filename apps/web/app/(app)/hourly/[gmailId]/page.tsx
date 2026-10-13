@@ -27,6 +27,7 @@ import {
 } from "@/components/hourly/client";
 import { ColumnChooser, copyRows, HourlyTable, useColumnPrefs } from "@/components/hourly/hourly-table";
 import { MultiSelect } from "@/components/hourly/multi-select";
+import { TableImageButton } from "@/components/hourly/table-image";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -144,6 +145,13 @@ function ResultsView({ gmailId }: { gmailId: string }) {
                 <ClipboardCopy className="h-4 w-4" />
                 Copy as table
               </Button>
+              <TableImageButton
+                rows={shown}
+                visibleColumns={cols.visible}
+                filters={filters}
+                title={`Nokia hourly report${current ? ` · ${formatDateTime(current.receivedAt, timeZone)}` : ""}`}
+                fileStem={`hourly-${(current?.receivedAt ?? meta.processedAt).slice(0, 16).replace(/[-:]/g, "").replace("T", "_")}`}
+              />
               {previous && (
                 <Button size="sm" variant="outline" className="bg-white" asChild>
                   <Link

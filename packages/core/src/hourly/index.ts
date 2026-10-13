@@ -1,5 +1,5 @@
 // "@alarm/core/hourly" — server entry: the full stateless pipeline (§14).
-// attachment bytes → validate → extract (temp dir, always removed) → parse → enrich +
+// attachment bytes (.rar, or a plain .xlsx) → validate → extract (temp dir, always removed) → parse → enrich +
 // normalize → { meta, rows }. Nothing is persisted.
 
 import { enrichRows, siteMap, type SiteInfo } from "./enrich.js";
@@ -7,7 +7,7 @@ import { extractXlsx, type RarBackend } from "./extract.js";
 import { compileNormalizer, type NormalizationRule } from "./normalize.js";
 import { parseReport } from "./parse.js";
 import type { HourlyMeta, HourlyRow } from "./types.js";
-import { validateRar, type HourlyLimits } from "./validate.js";
+import { attachmentKind, validateRar, validateXlsx, type HourlyLimits } from "./validate.js";
 
 export * from "./shared.js";
 export * from "./validate.js";
@@ -33,13 +33,20 @@ export interface ProcessInput {
 
 export async function processReport(input: ProcessInput): Promise<ProcessedReport> {
   const started = Date.now();
-  validateRar(input.fileName, input.data, input.limits);
-  const xlsx = await extractXlsx(input.data, {
-    limits: input.limits,
-    backend: input.backend,
-    tmpRoot: input.tmpRoot,
-  });
-  const parsed = await parseReport(xlsx.data);
+  let workbook: Buffer;
+  if (attachmentKind(input.fileName) === "xlsx") {
+    validateXlsx(input.fileName, input.data, input.limits);
+    workbook = input.data;
+  } else {
+    validateRar(input.fileName, input.data, input.limits);
+    const xlsx = await extractXlsx(input.data, {
+      limits: input.limits,
+      backend: input.backend,
+      tmpRoot: input.tmpRoot,
+    });
+    workbook = xlsx.data;
+  }
+  const parsed = await parseReport(workbook);
   const { rows, unmatchedCodes, emptyCodes } = enrichRows(
     parsed.rows,
     siteMap(input.sites),

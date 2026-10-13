@@ -2,7 +2,9 @@
 // download one attachment on demand. Same OAuth files as the worker (token.json +
 // credentials.json, read-only, gmail.readonly scope). Server-only.
 //
-// HOURLY_GMAIL_MOCK_DIR=<dir> replaces Gmail with the .rar files in that directory (local
+// The attachment is usually a .rar, sometimes the plain .xlsx — both are processed.
+//
+// HOURLY_GMAIL_MOCK_DIR=<dir> replaces Gmail with the .rar / .xlsx files in that directory (local
 // demo, Playwright smoke test). Tests can inject any source with setHourlySource().
 
 import { existsSync, readFileSync } from "node:fs";
@@ -56,7 +58,7 @@ function firstExisting(...paths: (string | undefined)[]): string {
 const header = (m: gmail_v1.Schema$Message, name: string) =>
   m.payload?.headers?.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value ?? "";
 
-/** First attachment, preferring a .rar. */
+/** The report attachment: a .rar first, else an .xlsx, else the first attachment. */
 function attachmentOf(m: gmail_v1.Schema$Message) {
   const parts: gmail_v1.Schema$MessagePart[] = [];
   const walk = (p?: gmail_v1.Schema$MessagePart) => {
@@ -65,7 +67,12 @@ function attachmentOf(m: gmail_v1.Schema$Message) {
     p.parts?.forEach(walk);
   };
   walk(m.payload);
-  return parts.find((p) => /\.rar$/i.test(p.filename!)) ?? parts[0] ?? null;
+  return (
+    parts.find((p) => /\.rar$/i.test(p.filename!)) ??
+    parts.find((p) => /\.xlsx$/i.test(p.filename!)) ??
+    parts[0] ??
+    null
+  );
 }
 
 function toInfo(m: gmail_v1.Schema$Message): HourlyReportInfo | null {
@@ -192,12 +199,12 @@ export function createGmailHourlySource(): HourlySource {
 
 // ---------------------------------------------------------------- mock (local files)
 
-/** Every .rar in `dir` is a report; gmailId = "mock-" + file name slug, time = file mtime. */
+/** Every .rar / .xlsx in `dir` is a report; gmailId = "mock-" + file name slug, time = file mtime. */
 export function createDirHourlySource(dir: string): HourlySource {
   const scan = async () => {
     const out: (HourlyReportInfo & { path: string })[] = [];
     for (const name of await readdir(dir)) {
-      if (!/\.rar$/i.test(name)) continue;
+      if (!/\.(rar|xlsx)$/i.test(name)) continue;
       const p = path.join(dir, name);
       const st = await stat(p);
       out.push({

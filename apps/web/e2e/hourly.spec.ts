@@ -1,4 +1,4 @@
-// Smoke: sign in → /hourly → process the fixture report → open → filter by office → export.
+// Smoke: sign in → /hourly → process the fixture report → open → filter by office → image → export.
 import { expect, test } from "@playwright/test";
 import ExcelJS from "exceljs";
 import { E2E_EMAIL, readPassword } from "./shared";
@@ -30,6 +30,24 @@ test("process, filter and export an hourly report", async ({ page }) => {
     [...new Set(trs.map((t) => t.getAttribute("data-office")))],
   );
   expect(offices).toEqual(["KAFR EL DAWAR"]);
+
+  // table as image (WhatsApp): PNG pages drawn from the filtered rows
+  await page.getByTestId("table-image").click();
+  const dialog = page.getByRole("dialog", { name: "Table as image" });
+  const imgs = dialog.locator("img");
+  await expect(imgs.first()).toBeVisible();
+  const n = await imgs.count();
+  const shown = Number((await count.locator("b").first().innerText()).replace(/,/g, ""));
+  expect(n).toBe(Math.ceil(shown / 40));
+  const size = await imgs.first().evaluate((i: HTMLImageElement) => [i.naturalWidth, i.naturalHeight]);
+  expect(size[0]).toBeGreaterThan(800);
+  expect(size[1]).toBeGreaterThan(1000);
+  const [png] = await Promise.all([
+    page.waitForEvent("download"),
+    dialog.getByRole("button", { name: /download/i }).click(),
+  ]);
+  expect(png.suggestedFilename()).toMatch(/^hourly-.*\.png$/);
+  await dialog.getByRole("button", { name: "Close" }).click();
 
   // export downloads an xlsx with the same filter
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-excel").click()]);

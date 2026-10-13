@@ -29,7 +29,10 @@ The reports are RAR5 with a method that `unrar-free`, `p7zip` and 7-Zip 23 canno
   first (size / entry / path checks before anything is written).
 - Override the binary path with `HOURLY_UNRAR_BIN`.
 
-**Safety checks** (any failure → report shows *Failed* with the reason in the tooltip):
+**Plain .xlsx attachments** (mail without a RAR) are processed directly: `.xlsx` extension,
+ZIP signature, ≤ `HOURLY_MAX_RAR_MB`, declared uncompressed size ≤ `HOURLY_MAX_EXTRACT_MB`.
+
+**Safety checks for .rar** (any failure → report shows *Failed* with the reason in the tooltip):
 `.rar` extension, RAR signature `52 61 72 21 1A 07`, ≤ `HOURLY_MAX_RAR_MB` (25);
 ≤ 20 entries, ≤ `HOURLY_MAX_EXTRACT_MB` (100) declared and on disk, no `..` / absolute
 paths / links, exactly one `.xlsx`. Extraction happens in a fresh temp dir that is deleted
@@ -43,7 +46,7 @@ in `finally`; nothing from the archive is executed.
 | `HOURLY_MAX_RAR_MB` | 25 | attachment size limit |
 | `HOURLY_MAX_EXTRACT_MB` | 100 | extracted size limit |
 | `HOURLY_CACHE_MIN` | 30 | cache TTL per processed report |
-| `HOURLY_GMAIL_MOCK_DIR` | — | dev/demo: serve the `.rar` files of a folder instead of Gmail |
+| `HOURLY_GMAIL_MOCK_DIR` | — | dev/demo: serve the `.rar` / `.xlsx` files of a folder instead of Gmail |
 | `HOURLY_UNRAR_BIN` | `unrar` | path to the official binary |
 
 Gmail access uses the same `token.json` + `credentials.json` as the worker (read-only scope);
