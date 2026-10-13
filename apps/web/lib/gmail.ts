@@ -212,7 +212,14 @@ export function createDirHourlySource(dir: string): HourlySource {
     }
     return out.sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
   };
-  const strip = ({ path: _p, ...info }: HourlyReportInfo & { path: string }) => info;
+  const strip = (r: HourlyReportInfo & { path: string }): HourlyReportInfo => ({
+    gmailId: r.gmailId,
+    receivedAt: r.receivedAt,
+    sender: r.sender,
+    subject: r.subject,
+    fileName: r.fileName,
+    fileSize: r.fileSize,
+  });
   return {
     async list({ from, to, page, pageSize }) {
       const all = (await scan()).filter(

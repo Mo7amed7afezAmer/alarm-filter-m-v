@@ -8,6 +8,7 @@ import {
   BellRing,
   Building2,
   CircleCheck,
+  FileClock,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -25,6 +26,7 @@ const LINKS: { href: string; label: string; icon: LucideIcon; admin?: boolean }[
   { href: "/alarms", label: "Alarms", icon: BellRing },
   { href: "/cleared", label: "Cleared", icon: CircleCheck },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/hourly", label: "Hourly Alarms", icon: FileClock },
   { href: "/settings", label: "Settings", icon: Settings, admin: true },
 ];
 

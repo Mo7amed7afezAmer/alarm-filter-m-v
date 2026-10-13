@@ -6,6 +6,17 @@
       "runtimeExecutable": "corepack",
       "runtimeArgs": ["pnpm", "--filter", "@alarm/web", "dev"],
       "port": 3000
+    },
+    {
+      "name": "web-hourly-mock",
+      "runtimeExecutable": "corepack",
+      "runtimeArgs": ["pnpm", "--filter", "@alarm/web", "exec", "next", "dev", "-p", "3100"],
+      "port": 3100,
+      "env": {
+        "NEXT_DIST_DIR": ".next-mock",
+        "NEXTAUTH_URL": "http://localhost:3100",
+        "HOURLY_GMAIL_MOCK_DIR": "../../tests/fixtures"
+      }
     }
   ]
 }

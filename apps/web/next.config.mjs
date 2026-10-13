@@ -5,6 +5,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // A second dev server (e.g. the hourly mock on :3100) needs its own build dir.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // Standalone is what the Docker image runs. Native Windows builds skip it because copying
   // pnpm's symlinked node_modules needs symlink privilege (Developer Mode).
   output: process.platform === "win32" ? undefined : "standalone",

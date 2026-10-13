@@ -1,5 +1,7 @@
 "use client";
 
+import { Building2 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAppConfig } from "@/components/app-config";
 import { Button } from "@/components/ui/button";
@@ -442,6 +444,14 @@ export default function SettingsPage() {
       <PageHeader
         title="Settings"
         subtitle="Office, classification rules, reprocessing and users (admin only)"
+        actions={
+          <Button size="sm" variant="outline" className="bg-white" asChild>
+            <Link href="/settings/site-master">
+              <Building2 className="h-4 w-4" />
+              Site Master (hourly reports)
+            </Link>
+          </Button>
+        }
       />
       <OfficePicker />
       <TypesVisibilityEditor mode="admin" />
