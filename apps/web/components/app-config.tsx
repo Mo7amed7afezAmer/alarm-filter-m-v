@@ -5,7 +5,7 @@ import { createContext, useContext, type ReactNode } from "react";
 export interface AppConfig {
   timeZone: string;
   alertHours: number;
-  role: "VIEWER" | "ADMIN";
+  role: "VIEWER" | "OPERATOR" | "ADMIN";
   email: string;
   /** Selected office (Gmail label), e.g. "DN/Kafr ElDawar". */
   office: string | null;

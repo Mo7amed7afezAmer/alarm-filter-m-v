@@ -2,7 +2,7 @@
 import { getServerSession, type Session } from "next-auth";
 import { NextResponse } from "next/server";
 import { z, type ZodTypeAny } from "zod";
-import { authOptions, type Role } from "./auth";
+import { authOptions, hasRole, type Role } from "./auth";
 
 export class HttpError extends Error {
   constructor(
@@ -14,11 +14,12 @@ export class HttpError extends Error {
   }
 }
 
-/** Throws 401 when not signed in, 403 when `role` is required and missing. */
+/** Throws 401 when not signed in, 403 when the user's role is below `role`. */
 export async function requireUser(role?: Role): Promise<Session> {
   const session = await getServerSession(authOptions);
   if (!session?.user) throw new HttpError(401, "Not signed in");
-  if (role === "ADMIN" && session.user.role !== "ADMIN") throw new HttpError(403, "Admin only");
+  if (role && !hasRole(session.user.role, role))
+    throw new HttpError(403, role === "ADMIN" ? "Admin only" : `${role.toLowerCase()} role required`);
   return session;
 }
 

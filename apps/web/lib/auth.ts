@@ -3,7 +3,13 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "./db";
 
-export type Role = "VIEWER" | "ADMIN";
+export type Role = "VIEWER" | "OPERATOR" | "ADMIN";
+
+/** Role hierarchy: each role can do everything the ones before it can. */
+export const ROLE_RANK: Record<Role, number> = { VIEWER: 0, OPERATOR: 1, ADMIN: 2 };
+
+export const hasRole = (actual: string | undefined, needed: Role): boolean =>
+  actual !== undefined && (ROLE_RANK[actual as Role] ?? -1) >= ROLE_RANK[needed];
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt", maxAge: 12 * 60 * 60 },

@@ -11,6 +11,9 @@ const nextConfig = {
   // Trace workspace packages (packages/*) from the monorepo root into the standalone bundle.
   experimental: {
     outputFileTracingRoot: path.join(__dirname, "../../"),
+    // Loaded from node_modules at runtime, never bundled: node-unrar-js reads its .wasm next
+    // to its own files; exceljs is large and CommonJS.
+    serverComponentsExternalPackages: ["node-unrar-js", "exceljs"],
   },
   transpilePackages: ["@alarm/core"],
 };

@@ -18,7 +18,7 @@ interface Rule {
 interface User {
   id: number;
   email: string;
-  role: "VIEWER" | "ADMIN";
+  role: "VIEWER" | "OPERATOR" | "ADMIN";
 }
 
 async function send(url: string, method: string, body?: unknown) {
@@ -206,7 +206,8 @@ function Users() {
       <CardHeader>
         <CardTitle className="text-base">Users</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Viewers can see all pages; admins can also edit rules, users and reprocess.
+          Viewers can see all pages; operators can also process hourly reports; admins can
+          also edit rules, users, Site Master and reprocess.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -236,6 +237,7 @@ function Users() {
                       }
                     >
                       <option value="VIEWER">viewer</option>
+                      <option value="OPERATOR">operator</option>
                       <option value="ADMIN">admin</option>
                     </select>
                   </td>
@@ -311,6 +313,7 @@ function Users() {
             onChange={(e) => setForm({ ...form, role: e.target.value as User["role"] })}
           >
             <option value="VIEWER">viewer</option>
+            <option value="OPERATOR">operator</option>
             <option value="ADMIN">admin</option>
           </select>
           <Button size="sm" type="submit">

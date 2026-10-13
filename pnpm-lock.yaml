@@ -53,6 +53,9 @@ importers:
       '@alarm/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@googleapis/gmail':
+        specifier: 22.0.1
+        version: 22.0.1
       '@prisma/client':
         specifier: 5.22.0
         version: 5.22.0(prisma@5.22.0)
@@ -83,6 +86,9 @@ importers:
       exceljs:
         specifier: 4.4.0
         version: 4.4.0
+      google-auth-library:
+        specifier: 11.2.0
+        version: 11.2.0
       lucide-react:
         specifier: ^1.55.0
         version: 1.55.0(@types/react@18.3.31)(react@18.3.1)

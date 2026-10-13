@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 const select = { id: true, email: true, role: true } as const;
-const role = z.enum(["VIEWER", "ADMIN"]);
+const role = z.enum(["VIEWER", "OPERATOR", "ADMIN"]);
 const password = z.string().min(8, "at least 8 characters").max(200);
 
 export const GET = handler(async () => {
