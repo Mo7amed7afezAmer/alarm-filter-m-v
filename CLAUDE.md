@@ -230,6 +230,120 @@ GMAIL_QUERY=            # optional Gmail search filter, e.g. from:alarms@vendor.
 GMAIL_LABELS=dn-kafr-eldawar   # comma-separated labels the worker reads (search form); empty = all mail
 ```
 
+## 13. Mobile (PWA first, Expo optional)
+**PWA (Phase 9):** Next.js app becomes installable: `manifest.json`, icons, service
+worker via Serwist, offline shell for /alarms. Web Push via `web-push` (VAPID keys in
+`.env`: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`).
+
+**Remote access (Phase 10):** `cloudflared` container in docker-compose.yml using a
+tunnel token (`CLOUDFLARE_TUNNEL_TOKEN` in .env) → `https://<subdomain>`; port 3000 stays
+LAN-only. Access restricted by app login (and Cloudflare Access if available).
+
+**Expo app (Phase 11, optional):** `apps/mobile` (Expo SDK 51, expo-router, TypeScript)
+sharing types from `packages/core`. Auth via `POST /api/auth/token` (Bearer JWT, 30 days,
+revocable). Push via Expo Push API. Distribution: APK for Android, TestFlight for iOS
+(requires paid Apple developer account).
+
+**Schema additions:**
+```
+PushSubscription  id, userId, platform(WEB|EXPO), endpoint (web) / expoToken,
+                  keys? (p256dh, auth), createdAt, lastUsedAt
+NotificationPref  userId @id, categories[], regions[], quietFrom?, quietTo?,
+                  notifyNewDown bool, notifyOverdue bool
+```
+
+**Notification rules (run by worker after each sync):**
+- New ACTIVE alarm with category DOWN → notify subscribers whose prefs match.
+- ACTIVE alarm crossing `ALERT_HOURS` → one "overdue" notification per alarm, once.
+- Batch: if > 3 events in one run → single summary notification ("5 new alarms").
+- Respect quiet hours; drop subscriptions that return 404/410.
+
+**Mobile screens:** Active list (oldest first, category color, pull-to-refresh,
+site search) · Alarm detail (related messages, duration) · Cleared (last 24h) ·
+Dashboard (3 counters + last sync) · Settings (notification prefs).
+
+**API additions:** `POST /api/auth/token`, `POST|DELETE /api/push/subscribe`,
+`GET|PUT /api/notifications/prefs`, `GET /api/alarms/:id`.
+
+## 14. Hourly Reports (Nokia Down & Environmental, RAR attachment) — STATELESS
+Emails under Gmail label `Hourly Update` carry a `.rar` with `NSN Update_Output.xlsx`.
+**Alarm rows are never stored.** Processing is on demand, in memory, with a short cache.
+The only persisted data: `SiteMaster` (enrichment) and `HourlyNormalization` (value fixes).
+
+**Pipeline (apps/api services/hourly):**
+1. `listReports()`: Gmail messages with label `Hourly Update` and an attachment →
+   {gmailId, receivedAt, sender, fileName, fileSize}. No download.
+2. `process(gmailId)`: download via `users.messages.attachments.get` → temp dir →
+   validate (`.rar`, magic `52 61 72 21 1A 07`, ≤ 25 MB; after extraction ≤ 100 MB,
+   ≤ 20 files, no `..`/absolute paths, exactly one .xlsx) → `unrar x -o+` →
+   read sheets with exceljs → dedupe across `*_Down` sheets on
+   (Distinguished Name, Alarm Text, Alarm Time), collecting `technologies[]` →
+   join `SiteMaster` on Site Code → normalize → rows JSON → LRU cache
+   (key gmailId, 30 min, max 20) → `finally` delete temp dir.
+3. `rows(gmailId, filters)` and `export(gmailId, filters)` serve from cache; if the
+   cache is cold, process() runs again transparently.
+4. `diff(a, b)`: process both, return new / disappeared rows (by site+alarmName+dn).
+Never execute anything from the archive. Never keep extracted files.
+
+**Extraction requirement:** official `unrar` package (non-free). `p7zip`, `unrar-free`
+and 7-Zip 23 FAIL on this RAR5 ("Unsupported Method"). Dockerfile:
+`apt-get install -y unrar` (multiverse/non-free enabled); fallback `node-unrar-js`.
+
+**File format (confirmed from a real sample):** sheets `All`, `2G_Down`, `3G_Down`,
+`4G_Down`, `5G_Down`, `Environmental`, `HW`; same 14 columns, header in row 1:
+Alarm Number | Alarm Type | Alarm Time | Alarm Text | Distinguished Name |
+Object Class | Name | Site Name | Site Code | Site Address | Diagnostic Info |
+User Additional Information | Supplementary Information | Related DN's
+- Use the categorized sheets, not `All` (`All` adds ~740 TRX rows with empty sites).
+- `Environmental`: real alarm is `Supplementary Information` (Alarm Text is constant).
+- region = last 2 chars of Site Code (DE, UP, AL, SI, CA, RE).
+- Flag Alarm Time year < 2020 as `clockInvalid`, keep the row.
+
+**Output row (what the UI/export shows — matches the user's Excel):**
+```
+alarmTime | alarmText | name | siteName | code | office* | nodality* | vip* | siteType* |
+powerSource* | battery* | supplementaryInfo | region | technologies | sheet | clockInvalid
+```
+`*` from SiteMaster; empty when the code is unknown (show a count of unmatched codes).
+Rows colored by office in UI and export; default sort office, then alarmTime desc.
+
+**Normalization (table `HourlyNormalization`, seed):** collapse double spaces, trim,
+upper-case; `MAIN POWER CUTTOFF`/`MAIN POWER  CUT OFF` → `MAIN POWER CUT OFF`,
+`SHELTER DOO` → `SHELTER DOOR`, `DAMNHOUR` → `DAMANHOUR`, `TEMPRATURE` → `TEMPERATURE`.
+
+**Category (for the category filter only, not stored):** `*_Down` → DOWN;
+Environmental with RECTIFIER|MAIN POWER|BATTERY|GENERATOR|SURGE → POWER; else OTHER.
+
+**Schema:**
+```
+SiteMaster           code @id, siteName?, office, nodality?, vip bool, siteType?,
+                     powerSource?, battery?, region?, notes?, updatedAt
+HourlyNormalization  id, field, from, to
+```
+Import SiteMaster from an uploaded xlsx (sheet `SiteMaster`, columns Code, Site Name,
+Office, Nodality, VIP, Site type, Power Source, Battery) — admin only; re-import upserts;
+one file per office is fine (template: tests/fixtures/SiteMaster_KafrElDawar.xlsx).
+
+**API (/api/v1):**
+```
+GET  /hourly-reports?from&to&page                     list from Gmail
+POST /hourly-reports/{gmailId}/process                202 → poll GET status
+GET  /hourly-reports/{gmailId}/status
+GET  /hourly-reports/{gmailId}/rows?sheet&region&office&alarm&siteType&category&from&to&q&page
+GET  /hourly-reports/{gmailId}/export?...same filters&columns=   xlsx
+GET  /hourly-reports/diff?a=&b=
+POST /site-master/import   GET /site-master   PUT /site-master/{code}   admin
+GET|PUT /hourly-normalizations                                           admin
+```
+
+**UI `/hourly`:** reports list (time, sender, file, size, Process button, cache
+state); results table with filters (sheet, region, office, alarm, site type, category,
+time range, search by code/name), column chooser, office colors, filters in URL,
+Export Excel reproducing the visible table; Compare view for two reports.
+Mobile: list + read-only table with the same filters.
+
+**Env:** `HOURLY_MAX_RAR_MB=25`, `HOURLY_MAX_EXTRACT_MB=100`, `HOURLY_CACHE_MIN=30`.
+
 ## 12. Current Status
 - [x] Phase 0 — repo, tooling, Docker skeleton (db healthy on Docker 29.8.2 / WSL2)
 - [x] Phase 1 — Gmail OAuth + sample fetch (token.json saved; 300 samples in samples/subjects.txt)

@@ -12,6 +12,8 @@ COPY apps/worker/package.json apps/worker/
 RUN pnpm install --frozen-lockfile --filter @alarm/db
 
 COPY packages/db packages/db
+# seed.ts imports the §14 normalization seed from core source (pure TS, run by tsx).
+COPY packages/core/src packages/core/src
 RUN pnpm --filter @alarm/db exec prisma generate && chown -R node:node /app
 
 USER node

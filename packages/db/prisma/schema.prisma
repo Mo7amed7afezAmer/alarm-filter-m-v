@@ -2,7 +2,7 @@
 
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -28,6 +28,8 @@ enum ClearType {
 
 enum Role {
   VIEWER
+  /// Viewer + may trigger on-demand processing (hourly reports).
+  OPERATOR
   ADMIN
 }
 
@@ -145,4 +147,36 @@ model SystemStatus {
   displayFilter   Json?
 
   @@map("system_status")
+}
+
+/// Site enrichment for hourly reports (§14). Imported from an uploaded xlsx, upserted by code.
+model SiteMaster {
+  /// Site Code, e.g. "3273DE".
+  code        String   @id
+  siteName    String?
+  office      String
+  nodality    String?
+  vip         Boolean  @default(false)
+  siteType    String?
+  powerSource String?
+  battery     String?
+  /// Last 2 chars of the code (DE, UP, AL, …).
+  region      String?
+  notes       String?
+  updatedAt   DateTime @updatedAt
+
+  @@index([office])
+  @@map("site_master")
+}
+
+/// Value fixes applied to hourly report fields after trim/collapse/upper-case (§14).
+/// field = row field name (alarmName, office, …) or "*" for every normalized field.
+model HourlyNormalization {
+  id    Int    @id @default(autoincrement())
+  field String
+  from  String
+  to    String
+
+  @@unique([field, from])
+  @@map("hourly_normalizations")
 }

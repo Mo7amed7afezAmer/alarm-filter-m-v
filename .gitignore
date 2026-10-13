@@ -24,3 +24,8 @@ Thumbs.db
 *.log
 .vscode/
 .idea/
+
+# real network data used as test fixtures (same policy as samples/) — tests skip without them
+tests/fixtures/*.rar
+tests/fixtures/*.xlsx
+SiteMaster_*.xlsx

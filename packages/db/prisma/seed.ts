@@ -3,10 +3,13 @@
  * - classification rules from CLAUDE.md §6 — only when the rules table is empty,
  *   so edits made in the UI survive re-runs
  * - SystemStatus row id=1
+ * - hourly report normalizations (§14) — only when that table is empty
  * - admin user from ADMIN_EMAIL / ADMIN_PASSWORD — created once, never overwritten,
  *   password never printed
  */
 import { PrismaClient, type Category } from "@prisma/client";
+// Source import (tsx): the migrate image ships packages/core/src but never builds it.
+import { DEFAULT_HOURLY_NORMALIZATIONS } from "../../core/src/hourly.js";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -43,6 +46,15 @@ async function seedSystemStatus() {
   console.log("system_status: ok");
 }
 
+async function seedHourlyNormalizations() {
+  if ((await prisma.hourlyNormalization.count()) > 0) {
+    console.log("hourly_normalizations: table not empty, leaving as-is");
+    return;
+  }
+  await prisma.hourlyNormalization.createMany({ data: DEFAULT_HOURLY_NORMALIZATIONS });
+  console.log(`hourly_normalizations: inserted ${DEFAULT_HOURLY_NORMALIZATIONS.length}`);
+}
+
 async function seedAdmin() {
   const email = process.env.ADMIN_EMAIL?.trim();
   const password = process.env.ADMIN_PASSWORD ?? "";
@@ -69,6 +81,7 @@ async function seedAdmin() {
 async function main() {
   await seedRules();
   await seedSystemStatus();
+  await seedHourlyNormalizations();
   await seedAdmin();
 }
 
