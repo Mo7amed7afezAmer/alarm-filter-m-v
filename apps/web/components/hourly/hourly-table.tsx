@@ -19,6 +19,7 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { AlertTriangle, ArrowDown, ArrowUp, Columns3, Inbox, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PhoneLink } from "@/components/alarm-bits";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -134,6 +135,8 @@ function Cell({ row, k }: { row: HourlyRow; k: HourlyColumnKey }) {
       ) : (
         <span className="text-slate-400">{row.vip === null ? "" : "—"}</span>
       );
+    case "phone":
+      return <PhoneLink value={row.phone || null} />;
     case "technologies":
       return (
         <span className="flex gap-1">

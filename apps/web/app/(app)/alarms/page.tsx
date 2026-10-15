@@ -3,7 +3,14 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Download, RefreshCw } from "lucide-react";
 import { Suspense, useMemo } from "react";
-import { AlarmCard, AlarmName, Mono } from "@/components/alarm-bits";
+import {
+  AlarmCard,
+  AlarmName,
+  Mono,
+  siteMasterColumns,
+  SiteCell,
+  type SiteMasterInfo,
+} from "@/components/alarm-bits";
 import { useAppConfig } from "@/components/app-config";
 import { CategoryBadge } from "@/components/badges";
 import { DataTable, Pager } from "@/components/data-table";
@@ -14,7 +21,7 @@ import { usePoll, useNow } from "@/components/use-poll";
 import { ageMinutes, CATEGORY_STRIPE, formatDateTime, formatMinutes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-interface ActiveAlarm {
+interface ActiveAlarm extends SiteMasterInfo {
   id: number;
   alarmName: string;
   site: string;
@@ -84,7 +91,11 @@ function AlarmsView() {
           <AlarmName value={c.getValue() as string} className="max-w-[14rem] 2xl:max-w-[22rem]" />
         ),
       },
-      { accessorKey: "site", header: "Site", cell: (c) => <Mono>{c.getValue() as string}</Mono> },
+      {
+        accessorKey: "site",
+        header: "Site",
+        cell: (c) => <SiteCell site={c.getValue() as string} vip={c.row.original.vip} />,
+      },
       {
         id: "cell",
         header: "Cell / device",
@@ -96,6 +107,7 @@ function AlarmsView() {
         header: "Region",
         cell: (c) => (c.getValue() as string | null) ?? <span className="text-slate-400">—</span>,
       },
+      ...siteMasterColumns<ActiveAlarm>(),
       {
         accessorKey: "alarmTime",
         header: "Raised",
@@ -200,6 +212,7 @@ function AlarmsView() {
             category={r.category}
             site={r.site}
             cell={r.cellName ?? r.device}
+            info={r}
             alert={isAlert(r)}
             meta={formatDateTime(r.alarmTime, timeZone)}
             right={<AgeBadge minutes={ageMinutes(r.alarmTime, now)} alert={isAlert(r)} />}

@@ -317,7 +317,7 @@ Environmental with RECTIFIER|MAIN POWER|BATTERY|GENERATOR|SURGE → POWER; else 
 **Schema:**
 ```
 SiteMaster           code @id, siteName?, office, nodality?, vip bool, siteType?,
-                     powerSource?, battery?, region?, notes?, updatedAt
+                     powerSource?, battery?, phone?, region?, notes?, updatedAt
 HourlyNormalization  id, field, from, to
 ```
 Import SiteMaster from an uploaded xlsx (sheet `SiteMaster`, columns Code, Site Name,
@@ -376,9 +376,22 @@ Mobile: list + read-only table with the same filters.
 - **Table as image (2026-10-13, user request):** "Image for WhatsApp" on /hourly/[gmailId]
   (`components/hourly/table-image.tsx`): filtered rows drawn on canvas (office colors, title
   = report time, subtitle = active filters), split into 25/40/60/100 rows per PNG; compact
-  column set by default or the table's visible columns. Share = Web Share API with files
+  column set by default or the table's visible columns. Images are split per category by
+  default (DOWN / POWER / OTHER never share an image; checkbox to turn off; file names
+  `hourly-<time>-down-1of2.png`). Share = Web Share API with files
   (phone + HTTPS only, e.g. Phase 10 tunnel); otherwise Download (and Copy image when the
   page is a secure context). No new dependency.
+- **Site Master on the alarm pages + phone (2026-10-14, user request):** `site_master.phone`
+  (migration `20261014000000_site_phone`) from the file's **Guard Number** column (also
+  Phone / Phone Number / Mobile; `phoneText()` restores the leading 0 Excel drops, several
+  numbers joined " / "). Alarm-mail sites are joined on `siteCodeOf(site)` = last "_" segment
+  (`SRAN_LWG_TDD_S_BH-QMB-LOQIN_0H31DE` → `0H31DE`) in `lib/queries.ts withSiteInfo()` →
+  `/api/alarms/active|cleared` + export add `siteCode, vip, nodality, battery, phone, siteType,
+  powerSource` (null when the code is not imported). /alarms and /cleared show a VIP badge
+  next to the site + Nodality / Battery / Phone (tel: link) columns and on the phone cards.
+  Hourly rows have a `phone` column too (default visible; in the compact WhatsApp image with
+  VIP + battery). Phone is editable in /settings/site-master. 2026-10-14: 116/286 alarm sites
+  match (only the Kafr El Dawar file is imported); 102/136 sites have a phone.
 - Fixture counts (tests/fixtures/NSN Update_Output.rar, 13-OCT-2026 ~07:00): data rows
   2G_Down 529, 3G_Down 434, 4G_Down 438, 5G_Down 2, Environmental 1394, HW 35; 856 unique
   Down rows after dedupe (181 SYNCHRONIZATION rows merged across 2G/3G/4G); 2,285 rows total.

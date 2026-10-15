@@ -65,6 +65,11 @@ export const GET = handler(async (req: Request) => {
     { header: "Device", key: "device", width: 10 },
     { header: "CONSEC_NBR", key: "consecNbr", width: 12 },
     { header: "Region", key: "region", width: 14 },
+    { header: "Site code", key: "siteCode", width: 10 },
+    { header: "VIP", key: "vipText", width: 6 },
+    { header: "Nodality", key: "nodality", width: 10 },
+    { header: "Battery", key: "battery", width: 9 },
+    { header: "Phone", key: "phone", width: 16 },
     { header: "Category", key: "category", width: 10 },
     { header: `Alarm time (${ALARM_TZ})`, key: "alarmTime", width: 22 },
     ...(status === "cleared"
@@ -81,6 +86,7 @@ export const GET = handler(async (req: Request) => {
       ...r,
       alarmTime: local(r.alarmTime),
       clearTime: local(r.clearTime),
+      vipText: r.vip === null ? "" : r.vip ? "YES" : "NO",
       ageHours: Math.round(((now - r.alarmTime.getTime()) / 3_600_000) * 10) / 10,
     });
   }

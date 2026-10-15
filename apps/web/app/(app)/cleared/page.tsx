@@ -4,7 +4,14 @@ import { zonedToUtc } from "@alarm/core";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Download } from "lucide-react";
 import { Suspense, useMemo } from "react";
-import { AlarmCard, AlarmName, Mono } from "@/components/alarm-bits";
+import {
+  AlarmCard,
+  AlarmName,
+  Mono,
+  siteMasterColumns,
+  SiteCell,
+  type SiteMasterInfo,
+} from "@/components/alarm-bits";
 import { useAppConfig } from "@/components/app-config";
 import { CategoryBadge, ClearTypeBadge } from "@/components/badges";
 import { DataTable, Pager } from "@/components/data-table";
@@ -15,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { usePoll } from "@/components/use-poll";
 import { CATEGORY_STRIPE, dateInputValue, formatDateTime, formatMinutes } from "@/lib/format";
 
-interface ClearedAlarm {
+interface ClearedAlarm extends SiteMasterInfo {
   id: number;
   alarmName: string;
   site: string;
@@ -88,13 +95,18 @@ function ClearedView() {
           <AlarmName value={c.getValue() as string} className="max-w-[14rem] 2xl:max-w-[22rem]" />
         ),
       },
-      { accessorKey: "site", header: "Site", cell: (c) => <Mono>{c.getValue() as string}</Mono> },
+      {
+        accessorKey: "site",
+        header: "Site",
+        cell: (c) => <SiteCell site={c.getValue() as string} vip={c.row.original.vip} />,
+      },
       {
         id: "cell",
         header: "Cell / device",
         accessorFn: (r) => r.cellName ?? r.device ?? "",
         cell: (c) => <Mono className="text-slate-500">{(c.getValue() as string) || "—"}</Mono>,
       },
+      ...siteMasterColumns<ClearedAlarm>(),
       {
         accessorKey: "alarmTime",
         header: "Raised",
@@ -193,6 +205,7 @@ function ClearedView() {
             category={r.category}
             site={r.site}
             cell={r.cellName ?? r.device}
+            info={r}
             meta={
               <span>
                 {formatDateTime(r.alarmTime, timeZone)} → {formatDateTime(r.clearTime, timeZone)}

@@ -1,4 +1,5 @@
 // Alarm list queries shared by /api/alarms/* and /api/export.
+import { siteCodeOf } from "@alarm/core";
 import type { Prisma } from "@alarm/db";
 import { z } from "zod";
 import { category, dateParam, pagination } from "./api";
@@ -83,15 +84,34 @@ export const alarmSelect = {
   consecNbr: true,
 } as const;
 
-/** Adds `region` / `owner` from the sites table. */
+/**
+ * Adds `region` / `owner` from the sites table, and the Site Master data (VIP, nodality,
+ * battery, phone, …) joined on the site code = last "_" segment of the site name.
+ * Site Master fields are null when the code is not imported (`vip` null = unknown).
+ */
 export async function withSiteInfo<T extends { site: string }>(rows: T[]) {
-  const sites = await prisma.site.findMany({
-    where: { site: { in: [...new Set(rows.map((r) => r.site))] } },
-  });
+  const codes = [...new Set(rows.map((r) => siteCodeOf(r.site)).filter((c): c is string => !!c))];
+  const [sites, masters] = await Promise.all([
+    prisma.site.findMany({ where: { site: { in: [...new Set(rows.map((r) => r.site))] } } }),
+    codes.length ? prisma.siteMaster.findMany({ where: { code: { in: codes } } }) : [],
+  ]);
   const bySite = new Map(sites.map((s) => [s.site, s]));
-  return rows.map((r) => ({
-    ...r,
-    region: bySite.get(r.site)?.region ?? null,
-    owner: bySite.get(r.site)?.owner ?? null,
-  }));
+  const byCode = new Map(masters.map((m) => [m.code, m]));
+  return rows.map((r) => {
+    const code = siteCodeOf(r.site);
+    const m = code ? byCode.get(code) : undefined;
+    return {
+      ...r,
+      region: bySite.get(r.site)?.region ?? m?.region ?? null,
+      owner: bySite.get(r.site)?.owner ?? null,
+      siteCode: code,
+      vip: m ? m.vip : null,
+      nodality: m?.nodality ?? null,
+      battery: m?.battery ?? null,
+      phone: m?.phone ?? null,
+      siteType: m?.siteType ?? null,
+      powerSource: m?.powerSource ?? null,
+    };
+  });
 }
+
