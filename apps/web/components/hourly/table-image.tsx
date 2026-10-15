@@ -2,10 +2,12 @@
 
 // "Table as image" for sharing on WhatsApp: the filtered rows are drawn on a <canvas> (office
 // colors, header, title) and split into pages so each picture stays readable on a phone.
+// By default each category (DOWN / POWER / OTHER) gets its own images — never mixed.
 // Share uses the Web Share API with files (phones, HTTPS only — e.g. via the tunnel); on the
 // LAN (plain http) the images are downloaded and attached in WhatsApp Web / Desktop.
 
 import {
+  CATEGORIES,
   HOURLY_COLUMNS,
   hourlyCellText,
   officeColor,
@@ -26,6 +28,9 @@ export const COMPACT_COLUMNS: HourlyColumnKey[] = [
   "code",
   "office",
   "nodality",
+  "vip",
+  "battery",
+  "phone",
   "siteType",
 ];
 
@@ -187,6 +192,7 @@ export function TableImageButton({
   const [open, setOpen] = useState(false);
   const [compact, setCompact] = useState(true);
   const [perPage, setPerPage] = useState(40);
+  const [byCategory, setByCategory] = useState(true);
   const [pages, setPages] = useState<Page[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -202,25 +208,35 @@ export function TableImageButton({
     setBusy(true);
     setMsg(null);
     (async () => {
+      // same column widths for every image so they line up when scrolled through
       const widths = columnWidths(rows, cols);
-      const n = Math.max(1, Math.ceil(rows.length / perPage));
       const stamp = new Date().toLocaleString("en-GB", { hour12: false });
-      for (let i = 0; i < n && !cancelled; i++) {
-        const slice = rows.slice(i * perPage, (i + 1) * perPage);
-        const range = rows.length
-          ? `rows ${i * perPage + 1}–${i * perPage + slice.length} of ${rows.length}`
-          : "no rows";
-        const blob = await renderPage({
-          rows: slice,
-          cols,
-          widths,
-          title: n > 1 ? `${title}  (${i + 1}/${n})` : title,
-          subtitle,
-          footer: `${range} · Alarm Filter · ${stamp}`,
-        });
-        const name = `${fileStem}${n > 1 ? `-${i + 1}of${n}` : ""}.png`;
-        const file = new File([blob], name, { type: "image/png" });
-        made.push({ file, url: URL.createObjectURL(blob) });
+      const groups: { label: string | null; rows: HourlyRow[] }[] = byCategory
+        ? CATEGORIES.map((c) => ({ label: c as string | null, rows: rows.filter((r) => r.category === c) })).filter(
+            (g) => g.rows.length,
+          )
+        : [{ label: null, rows }];
+      if (!groups.length) groups.push({ label: null, rows: [] });
+      for (const g of groups) {
+        const n = Math.max(1, Math.ceil(g.rows.length / perPage));
+        const head = g.label ? `${title} · ${g.label}` : title;
+        for (let i = 0; i < n && !cancelled; i++) {
+          const slice = g.rows.slice(i * perPage, (i + 1) * perPage);
+          const range = g.rows.length
+            ? `${g.label ? `${g.label} ` : ""}rows ${i * perPage + 1}–${i * perPage + slice.length} of ${g.rows.length}`
+            : "no rows";
+          const blob = await renderPage({
+            rows: slice,
+            cols,
+            widths,
+            title: n > 1 ? `${head}  (${i + 1}/${n})` : head,
+            subtitle,
+            footer: `${range} · Alarm Filter · ${stamp}`,
+          });
+          const name = `${fileStem}${g.label ? `-${g.label.toLowerCase()}` : ""}${n > 1 ? `-${i + 1}of${n}` : ""}.png`;
+          const file = new File([blob], name, { type: "image/png" });
+          made.push({ file, url: URL.createObjectURL(blob) });
+        }
       }
       if (!cancelled) setPages(made);
     })()
@@ -230,7 +246,7 @@ export function TableImageButton({
       cancelled = true;
       made.forEach((p) => URL.revokeObjectURL(p.url));
     };
-  }, [open, rows, cols, perPage, title, subtitle, fileStem]);
+  }, [open, rows, cols, perPage, byCategory, title, subtitle, fileStem]);
 
   const files = pages.map((p) => p.file);
   const canShare =
@@ -307,6 +323,10 @@ export function TableImageButton({
                     </option>
                   ))}
                 </select>
+              </label>
+              <label className="flex h-9 items-center gap-2">
+                <input type="checkbox" checked={byCategory} onChange={(e) => setByCategory(e.target.checked)} />
+                Separate images per category (Down / Power / Other)
               </label>
               <div className="ml-auto flex flex-wrap gap-2">
                 {canShare && (
