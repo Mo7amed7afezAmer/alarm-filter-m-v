@@ -109,6 +109,40 @@ describe.skipIf(!url)("API integration", () => {
       expect(p2.body.items).toHaveLength(1);
     });
 
+    it("adds VIP / nodality / battery / phone from Site Master (code = last _ segment)", async () => {
+      session.current = { user: { role: "VIEWER" } };
+      const site = "SMJOIN_LWG_S_BH-TEST_9Z98ZT";
+      await prisma.siteMaster.upsert({
+        where: { code: "9Z98ZT" },
+        create: { code: "9Z98ZT", office: "TEST", vip: true, nodality: "1+3", battery: "YES", phone: "01012345678" },
+        update: { vip: true, nodality: "1+3", battery: "YES", phone: "01012345678" },
+      });
+      await prisma.alarm.create({
+        data: {
+          alarmKey: `X||${site}`,
+          alarmName: "S_D_N_X",
+          site,
+          category: "OTHER",
+          alarmTime: new Date(),
+          status: "ACTIVE",
+        },
+      });
+      try {
+        const { body } = await get(activeGET, "/api/alarms/active?site=SMJOIN");
+        expect(body.items).toHaveLength(1);
+        expect(body.items[0]).toMatchObject({
+          siteCode: "9Z98ZT",
+          vip: true,
+          nodality: "1+3",
+          battery: "YES",
+          phone: "01012345678",
+        });
+      } finally {
+        await prisma.alarm.deleteMany({ where: { site } });
+        await prisma.siteMaster.delete({ where: { code: "9Z98ZT" } });
+      }
+    });
+
     it("400 on invalid query", async () => {
       session.current = { user: { role: "VIEWER" } };
       const r = await get(activeGET, "/api/alarms/active?category=FIRE&page=0");

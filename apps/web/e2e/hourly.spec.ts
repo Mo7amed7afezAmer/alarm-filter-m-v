@@ -38,10 +38,13 @@ test("process, filter and export an hourly report", async ({ page }) => {
   await expect(imgs.first()).toBeVisible();
   const n = await imgs.count();
   const shown = Number((await count.locator("b").first().innerText()).replace(/,/g, ""));
-  expect(n).toBe(Math.ceil(shown / 40));
+  expect(n).toBeGreaterThanOrEqual(Math.ceil(shown / 40));
+  // one set of images per category, never mixed
+  const names = await dialog.locator("img").evaluateAll((els) => els.map((e) => e.getAttribute("alt")));
+  for (const name of names) expect(name).toMatch(/-(down|power|other)(-\d+of\d+)?\.png$/);
   const size = await imgs.first().evaluate((i: HTMLImageElement) => [i.naturalWidth, i.naturalHeight]);
   expect(size[0]).toBeGreaterThan(800);
-  expect(size[1]).toBeGreaterThan(1000);
+  expect(size[1]).toBeGreaterThan(200);
   const [png] = await Promise.all([
     page.waitForEvent("download"),
     dialog.getByRole("button", { name: /download/i }).click(),
