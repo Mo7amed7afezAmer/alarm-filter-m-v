@@ -23,6 +23,7 @@ interface Site {
   siteType: string | null;
   powerSource: string | null;
   battery: string | null;
+  phone: string | null;
   region: string | null;
   notes: string | null;
   updatedAt: string;
@@ -73,8 +74,9 @@ function ImportCard({ onDone }: { onDone: () => void }) {
         <CardTitle className="text-base">Import Site Master</CardTitle>
         <p className="text-sm text-muted-foreground">
           Excel with a sheet <b>SiteMaster</b> and the columns Code, Site Name, Office, Nodality, VIP,
-          Site type, Power Source, Battery. Re-importing updates existing codes; one file per office
-          is fine. Other columns (e.g. Guard Number) are ignored.
+          Site type, Power Source, Battery, Guard Number (phone — also read from a Phone / Mobile
+          column). Re-importing updates existing codes; one file per office is fine. Other columns are
+          ignored. Alarm pages show VIP, nodality, battery and phone from here.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -226,7 +228,7 @@ function SitesTable({ reloadKey }: { reloadKey: number }) {
         </div>
         {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         <div className="-mx-1 overflow-x-auto">
-          <table className="w-full min-w-[52rem] text-sm">
+          <table className="w-full min-w-[58rem] text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="py-2">Code</th>
@@ -237,13 +239,14 @@ function SitesTable({ reloadKey }: { reloadKey: number }) {
                 <th>Site type</th>
                 <th>Power</th>
                 <th>Battery</th>
+                <th>Phone</th>
                 <th>Region</th>
               </tr>
             </thead>
             <tbody>
               {data?.data.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-slate-500">
+                  <td colSpan={10} className="py-8 text-center text-slate-500">
                     No sites — import a Site Master file above.
                   </td>
                 </tr>
@@ -264,6 +267,9 @@ function SitesTable({ reloadKey }: { reloadKey: number }) {
                     </td>
                     <td>{s.powerSource ?? "—"}</td>
                     <td>{s.battery ?? "—"}</td>
+                    <td>
+                      <EditableCell value={s.phone ?? ""} onSave={(v) => save(s.code, { phone: v || null })} />
+                    </td>
                     <td>{s.region ?? "—"}</td>
                   </tr>
                 );

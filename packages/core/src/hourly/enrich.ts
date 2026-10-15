@@ -14,6 +14,7 @@ export interface SiteInfo {
   siteType?: string | null;
   powerSource?: string | null;
   battery?: string | null;
+  phone?: string | null;
 }
 
 export interface EnrichResult {
@@ -54,6 +55,7 @@ export function enrichRows(
       siteType: normalize("siteType", site?.siteType),
       powerSource: normalize("powerSource", site?.powerSource),
       battery: normalize("battery", site?.battery),
+      phone: site?.phone ?? "",
       supplementaryInfo: normalize("supplementaryInfo", r.supplementaryInfo),
       region: regionOf(code),
       technologies: r.technologies,

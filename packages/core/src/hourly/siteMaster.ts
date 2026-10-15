@@ -1,10 +1,11 @@
 // SiteMaster import file (§14): sheet "SiteMaster", columns Code, Site Name, Office,
-// Nodality, VIP, Site type, Power Source, Battery (+ optional Notes). Server-only.
-// Other columns in the template (Guard Number, Owner Code, Nodality (raw)) are ignored.
+// Nodality, VIP, Site type, Power Source, Battery, Guard Number (= phone; also accepted as
+// Phone / Phone Number / Mobile) (+ optional Notes). Server-only.
+// Other columns in the template (Owner Code, Nodality (raw)) are ignored.
 
 import ExcelJS from "exceljs";
 import { baseNormalize } from "./normalize.js";
-import { regionOf } from "./types.js";
+import { regionOf, SITE_CODE_RE } from "./types.js";
 import { HourlyReportError } from "./validate.js";
 
 export interface SiteMasterInput {
@@ -16,6 +17,7 @@ export interface SiteMasterInput {
   siteType: string | null;
   powerSource: string | null;
   battery: string | null;
+  phone: string | null;
   region: string | null;
   notes: string | null;
 }
@@ -34,9 +36,14 @@ const COLS = {
   siteType: "Site type",
   powerSource: "Power Source",
   battery: "Battery",
+  phone: ["Guard Number", "Guard Phone", "Phone", "Phone Number", "Mobile", "Contact"],
   notes: "Notes",
 } as const;
 type Key = keyof typeof COLS;
+const labels = (k: Key): readonly string[] => {
+  const l = COLS[k];
+  return typeof l === "string" ? [l] : l;
+};
 const hk = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
 
 function text(v: ExcelJS.CellValue): string {
@@ -51,8 +58,25 @@ function text(v: ExcelJS.CellValue): string {
   return String(v).replace(/\s+/g, " ").trim();
 }
 
-/** Site codes look like "3273DE": 4 alphanumerics + 2-letter region. */
-const CODE_RE = /^[0-9A-Z]{3,6}[A-Z]{2}$/;
+const CODE_RE = SITE_CODE_RE;
+
+/**
+ * Phone cell → text. Excel often stores mobile numbers as numbers and drops the leading 0
+ * (1012345678 → "01012345678"). Several numbers stay separated by " / ".
+ */
+export function phoneText(raw: string): string | null {
+  const parts = raw
+    .split(/[/,;|\n]+/)
+    // "0101234567 0109876543" = two numbers; "010 123 4567" = one
+    .flatMap((p) => {
+      const tokens = p.trim().split(/\s+/);
+      return tokens.length > 1 && tokens.every((t) => t.replace(/\D/g, "").length >= 8) ? tokens : [p];
+    })
+    .map((p) => p.replace(/[^\d+]/g, ""))
+    .filter((p) => p.length >= 6)
+    .map((p) => (/^1\d{9}$/.test(p) ? `0${p}` : p));
+  return parts.length ? [...new Set(parts)].join(" / ") : null;
+}
 
 export async function parseSiteMasterXlsx(data: Buffer): Promise<SiteMasterParse> {
   const wb = new ExcelJS.Workbook();
@@ -70,8 +94,8 @@ export async function parseSiteMasterXlsx(data: Buffer): Promise<SiteMasterParse
   const idx: Partial<Record<Key, number>> = {};
   ws.getRow(1).eachCell((cell, col) => {
     const h = hk(text(cell.value));
-    for (const [k, label] of Object.entries(COLS) as [Key, string][])
-      if (hk(label) === h && idx[k] === undefined) idx[k] = col;
+    for (const k of Object.keys(COLS) as Key[])
+      if (labels(k).some((l) => hk(l) === h) && idx[k] === undefined) idx[k] = col;
   });
   if (!idx.code || !idx.office)
     throw new HourlyReportError(
@@ -102,6 +126,7 @@ export async function parseSiteMasterXlsx(data: Buffer): Promise<SiteMasterParse
       siteType: opt("siteType"),
       powerSource: opt("powerSource"),
       battery: opt("battery"),
+      phone: phoneText(get("phone")),
       region: regionOf(code) || null,
       notes: opt("notes"),
     });

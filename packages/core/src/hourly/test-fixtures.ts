@@ -37,6 +37,7 @@ export const row = (over: Partial<HourlyRow> = {}): HourlyRow => ({
   siteType: "SHELTER",
   powerSource: "EC",
   battery: "YES",
+  phone: "",
   supplementaryInfo: "",
   region: "DE",
   technologies: ["2G"],

@@ -160,6 +160,8 @@ model SiteMaster {
   siteType    String?
   powerSource String?
   battery     String?
+  /// Site contact number ("Guard Number" in the SiteMaster file).
+  phone       String?
   /// Last 2 chars of the code (DE, UP, AL, …).
   region      String?
   notes       String?

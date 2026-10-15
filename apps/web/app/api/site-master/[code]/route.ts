@@ -25,6 +25,13 @@ const body = z
     siteType: text,
     powerSource: text,
     battery: text,
+    phone: z
+      .string()
+      .trim()
+      .max(100)
+      .regex(/^[\d+ /()-]*$/, "digits only (several numbers separated by /)")
+      .transform((s) => s || null)
+      .nullable(),
     notes: z.string().trim().max(1000).transform((s) => s || null).nullable(),
   })
   .partial()

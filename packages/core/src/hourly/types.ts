@@ -38,6 +38,8 @@ export interface HourlyRow {
   siteType: string;
   powerSource: string;
   battery: string;
+  /** Site contact (Guard Number in the SiteMaster file); "" when unknown. */
+  phone: string;
   supplementaryInfo: string;
   region: string;
   /** "2G", "3G", … collected across the *_Down sheets the row appeared in. */
@@ -78,6 +80,7 @@ export const HOURLY_COLUMNS = [
   { key: "siteType", header: "Site Type", width: 12 },
   { key: "powerSource", header: "Power Source", width: 12 },
   { key: "battery", header: "Battery", width: 9 },
+  { key: "phone", header: "Phone", width: 14 },
   { key: "supplementaryInfo", header: "Supplementary Information", width: 34 },
   { key: "region", header: "Region", width: 8 },
   { key: "technologies", header: "Technologies", width: 14 },
@@ -109,6 +112,19 @@ export function hourlyCategory(sheet: string, alarmName: string): Category {
   if (isDownSheet(sheet)) return "DOWN";
   if (sheet === "Environmental" && POWER_RE.test(alarmName.toUpperCase())) return "POWER";
   return "OTHER";
+}
+
+/** Site codes look like "3273DE" / "0H31DE": 3–6 alphanumerics + 2-letter region. */
+export const SITE_CODE_RE = /^[0-9A-Z]{3,6}[A-Z]{2}$/;
+
+/**
+ * Site code of an alarm-mail site name — its last "_" segment:
+ * "SRAN_LWG_TDD_S_BH-QMB-LOQIN_0H31DE" → "0H31DE", "U_S_BH-MHLT-KYL_3830DE" → "3830DE".
+ * null when the last segment is not a code.
+ */
+export function siteCodeOf(site: string | null | undefined): string | null {
+  const last = (site ?? "").trim().split("_").pop()?.toUpperCase() ?? "";
+  return SITE_CODE_RE.test(last) ? last : null;
 }
 
 /** "3273DE" → "DE". */
