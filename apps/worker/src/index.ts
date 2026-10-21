@@ -1,6 +1,6 @@
 // Long-running worker: node-cron every minute, one run at a time, /health on :4000.
 import cron from "node-cron";
-import { PrismaClient } from "@alarm/db";
+import { loadGmailAuth, PrismaClient } from "@alarm/db";
 import { config } from "./config.js";
 import { createGmailSource } from "./gmail.js";
 import { startHealthServer, type HealthState } from "./health.js";
@@ -9,9 +9,10 @@ import { recordError, runOnce } from "./run.js";
 const log = (msg: string) => console.log(`${new Date().toISOString()} [worker] ${msg}`);
 
 const prisma = new PrismaClient();
-const source = createGmailSource(config.credentialsPath, config.tokenPath, {
-  labels: config.gmailLabels,
-});
+// Token from /settings/gmail (gmail_account) or the mounted files — re-read every run.
+const source = createGmailSource(() =>
+  loadGmailAuth(prisma, { credentialsPath: config.credentialsPath, tokenPath: config.tokenPath }),
+);
 const state: HealthState = { startedAt: new Date(), running: false };
 
 async function tick() {
@@ -29,15 +30,15 @@ async function tick() {
       maxPerRun: config.maxPerRun,
       backfillHours: config.backfillHours,
       query: config.gmailQuery,
-      defaultLabels: config.gmailLabels,
       officeParents: config.officeParents,
       log,
     });
     const p = r.processed;
     log(
-      `run ok in ${Date.now() - started}ms office=${r.office ?? "(all)"} mode=${r.mode} fetched=${r.fetched} backlog=${r.backlog} ` +
+      `run ok in ${Date.now() - started}ms mode=${r.mode} fetched=${r.fetched}/${r.cap}${r.throttled ? " (quota)" : ""} backlog=${r.backlog} ` +
         `processed=${p.total} created=${p.created + p.superseded} cleared=${p.cleared + p.created_cleared} ` +
-        `orphan=${p.orphan} dup=${p.duplicate} huawei=${p.ignored_format} parse_errors=${p.parse_error}`,
+        `orphan=${p.orphan} dup=${p.duplicate} huawei=${p.ignored_format} parse_errors=${p.parse_error} ` +
+        `office_changes=${r.officesResolved}`,
     );
   } catch (err) {
     log(`run FAILED: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
@@ -50,7 +51,7 @@ async function tick() {
 const server = startHealthServer(prisma, state, config.healthPort, config.staleAfterSec);
 const task = cron.schedule(config.cron, () => void tick());
 log(
-  `started: cron="${config.cron}" tz=${config.alarmTz} labels=${config.gmailLabels.join(",") || "(all mail)"} max/run=${config.maxPerRun} health=:${config.healthPort}`,
+  `started: cron="${config.cron}" tz=${config.alarmTz} mailbox=all office_parents=${config.officeParents.join(",")} max/run=${config.maxPerRun} health=:${config.healthPort}`,
 );
 void tick();
 

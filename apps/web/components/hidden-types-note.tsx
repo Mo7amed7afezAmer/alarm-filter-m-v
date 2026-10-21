@@ -20,7 +20,7 @@ export function HiddenTypesNote() {
       {hiddenTypes > 0 && (
         <span>
           {plural(hiddenTypes)} hidden for everyone
-          {role === "ADMIN" && (
+          {role === "SUPER_ADMIN" && (
             <>
               {" · "}
               <Link href="/settings#display" className="font-medium underline">

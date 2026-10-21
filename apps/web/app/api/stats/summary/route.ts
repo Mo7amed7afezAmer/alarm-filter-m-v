@@ -21,7 +21,7 @@ export const GET = handler(async (req: Request) => {
   const since = new Date(now.getTime() - days * 86_400_000);
   const day = new Date(now.getTime() - 86_400_000);
   const alertHours = Number(process.env.ALERT_HOURS) || 4;
-  const office = await officeFilter(); // orphan/raw counts (not alarm types)
+  const office = await officeFilter(Number(session.user.id)); // orphan/raw counts (not alarm types)
   const scope = await alarmScope(Number(session.user.id)); // alarms: office + hidden types
 
   const [active, mttr, overdue, status, orphans24h, parseErrors24h, cleared24h] = await Promise.all(

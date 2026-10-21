@@ -16,6 +16,7 @@ import { HttpError } from "./api";
 import { hasRole, type Role } from "./auth";
 import { prisma } from "./db";
 import { hourlySource, NotFoundError } from "./gmail";
+import { getOffice, sameOffice } from "./office";
 import { ReportCache, type CacheStatus } from "./hourlyCache";
 
 const ttlMin = Number(process.env.HOURLY_CACHE_MIN) > 0 ? Number(process.env.HOURLY_CACHE_MIN) : 30;
@@ -73,6 +74,16 @@ export async function getReport(gmailId: string, role: string | undefined): Prom
     if (err instanceof HourlyReportError) throw new HttpError(422, err.message, { code: err.code });
     throw err;
   }
+}
+
+/**
+ * Rows the user may see: the super admin (all offices) gets every row; an office user only the
+ * rows whose Site Master office is their office (rows with an unknown site code are left out).
+ */
+export async function scopeRows(rows: HourlyRow[], userId: number): Promise<HourlyRow[]> {
+  const office = await getOffice(userId);
+  if (office === null) return rows;
+  return office ? rows.filter((r) => sameOffice(r.office, office)) : [];
 }
 
 // ---- query parsing (filters are repeatable: ?office=A&office=B) ----

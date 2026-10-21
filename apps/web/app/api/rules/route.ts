@@ -23,13 +23,13 @@ async function listRules() {
 }
 
 export const GET = handler(async () => {
-  await requireUser("ADMIN");
+  await requireUser("SUPER_ADMIN");
   return NextResponse.json({ rules: await listRules() });
 });
 
 /** Replace all rules, then re-classify existing alarms (one UPDATE per distinct alarm name). */
 export const PUT = handler(async (req: Request) => {
-  await requireUser("ADMIN");
+  await requireUser("SUPER_ADMIN");
   const { rules } = await parseBody(req, rulesBody);
 
   const reclassified = await prisma.$transaction(async (tx) => {

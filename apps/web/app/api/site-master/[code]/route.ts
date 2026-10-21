@@ -1,8 +1,9 @@
-// PUT /api/site-master/{code} (admin) — inline edit of one site.
+// PUT /api/site-master/{code} (super admin) — inline edit of one site.
 import { baseNormalize } from "@alarm/core";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { handler, HttpError, parseBody, requireUser } from "@/lib/api";
+import { resolveOffices } from "@alarm/db";
 import { prisma } from "@/lib/db";
 import { hourlyCache } from "@/lib/hourly";
 
@@ -38,12 +39,13 @@ const body = z
   .strict();
 
 export const PUT = handler(async (req: Request, ctx: { params: { code: string } }) => {
-  await requireUser("ADMIN");
+  await requireUser("SUPER_ADMIN");
   const code = ctx.params.code.trim().toUpperCase();
   const data = await parseBody(req, body);
   if (!(await prisma.siteMaster.findUnique({ where: { code } })))
     throw new HttpError(404, `Site ${code} not found`);
   const site = await prisma.siteMaster.update({ where: { code }, data });
   hourlyCache.clear();
+  if (data.office) await resolveOffices(prisma); // alarms of this site may move office
   return NextResponse.json({ data: site });
 });

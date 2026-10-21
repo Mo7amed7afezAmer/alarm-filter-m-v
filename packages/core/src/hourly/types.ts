@@ -151,7 +151,14 @@ export const OFFICE_PALETTE = [
   "F5F5F4", // stone
 ] as const;
 
-const officeKey = (office: string) => office.toUpperCase().replace(/[^A-Z]/g, "");
+/**
+ * Comparable office name: last "/" segment, letters only, upper-case. Links the Gmail office
+ * label to the Site Master office column: "DN/Kafr ElDawar" and "KAFR EL DAWAR" → "KAFRELDAWAR".
+ */
+export const officeMatchKey = (office: string): string =>
+  (office.split("/").pop() ?? "").toUpperCase().replace(/[^A-Z]/g, "");
+
+const officeKey = officeMatchKey;
 
 /** Fixed slots for the known offices (CLAUDE.md §12 office list) so colors never shuffle. */
 const FIXED: Record<string, number> = {

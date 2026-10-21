@@ -1,4 +1,4 @@
-// GET|PUT /api/hourly-normalizations (admin) — value fixes applied to hourly reports (§14).
+// GET|PUT /api/hourly-normalizations (super admin) — value fixes applied to hourly reports (§14).
 // PUT replaces the whole list and clears the hourly cache.
 import { NORMALIZED_FIELDS } from "@alarm/core";
 import { NextResponse } from "next/server";
@@ -17,13 +17,13 @@ const rule = z.object({
 });
 
 export const GET = handler(async () => {
-  await requireUser("ADMIN");
+  await requireUser("SUPER_ADMIN");
   const data = await prisma.hourlyNormalization.findMany({ orderBy: [{ field: "asc" }, { from: "asc" }] });
   return NextResponse.json({ data, meta: { fields: ["*", ...NORMALIZED_FIELDS] } });
 });
 
 export const PUT = handler(async (req: Request) => {
-  await requireUser("ADMIN");
+  await requireUser("SUPER_ADMIN");
   const rules = await parseBody(req, z.array(rule).max(500));
   // (field, from) is unique — keep the last occurrence
   const unique = [...new Map(rules.map((r) => [`${r.field}\u0000${r.from.toUpperCase()}`, r])).values()];

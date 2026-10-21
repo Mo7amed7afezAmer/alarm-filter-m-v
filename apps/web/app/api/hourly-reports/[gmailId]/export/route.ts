@@ -4,7 +4,7 @@ import { filterHourlyRows, parseHourlySort, sortHourlyRows } from "@alarm/core";
 import { buildHourlyXlsx } from "@alarm/core/hourly";
 import { handler, requireUser } from "@/lib/api";
 import { hourlySource } from "@/lib/gmail";
-import { checkGmailId, getReport, parseColumns, parseFilters } from "@/lib/hourly";
+import { checkGmailId, getReport, parseColumns, parseFilters, scopeRows } from "@/lib/hourly";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,7 +18,8 @@ export const GET = handler(async (req: Request, ctx: { params: { gmailId: string
   const sort = parseHourlySort(sp.get("sort"));
 
   const report = await getReport(id, session.user.role);
-  const rows = sortHourlyRows(filterHourlyRows(report.rows, filters), sort);
+  const visible = await scopeRows(report.rows, Number(session.user.id));
+  const rows = sortHourlyRows(filterHourlyRows(visible, filters), sort);
   const buf = await buildHourlyXlsx(rows, columns);
 
   const info = await hourlySource()

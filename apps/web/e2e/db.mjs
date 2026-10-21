@@ -31,8 +31,8 @@ try {
     const passwordHash = await bcrypt.hash(password, 10);
     await prisma.user.upsert({
       where: { email: E2E_EMAIL },
-      create: { email: E2E_EMAIL, passwordHash, role: "ADMIN" },
-      update: { passwordHash, role: "ADMIN" },
+      create: { email: E2E_EMAIL, passwordHash, role: "SUPER_ADMIN", office: null },
+      update: { passwordHash, role: "SUPER_ADMIN", office: null },
     });
     await prisma.$transaction(
       rows.map(({ code, ...rest }) =>

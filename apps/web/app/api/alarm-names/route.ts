@@ -17,7 +17,7 @@ export const GET = handler(async (req: Request) => {
       by: ["alarmName", "category"],
       where: {
         alarmTime: { gte: new Date(Date.now() - 30 * 86_400_000) },
-        ...(await officeFilter()),
+        ...(await officeFilter(Number(session.user.id))),
       },
       _count: { _all: true },
       orderBy: { _count: { alarmName: "desc" } },

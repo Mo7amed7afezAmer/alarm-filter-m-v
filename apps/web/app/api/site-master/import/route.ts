@@ -1,8 +1,10 @@
-// POST /api/site-master/import (admin, multipart form field "file": .xlsx) → upsert by Code.
-// Returns { inserted, updated, skipped[] }. Clears the hourly cache (enrichment changed).
+// POST /api/site-master/import (super admin, multipart form field "file": .xlsx) → upsert by Code.
+// Returns { inserted, updated, skipped[], reassigned, unmappedOffices[] }. Clears the hourly cache
+// (enrichment changed) and re-resolves the office of every alarm (site code → Site Master office).
 import { HourlyReportError, parseSiteMasterXlsx } from "@alarm/core/hourly";
 import { NextResponse } from "next/server";
 import { handler, HttpError, requireUser } from "@/lib/api";
+import { resolveOffices, unmappedSiteMasterOffices } from "@alarm/db";
 import { prisma } from "@/lib/db";
 import { hourlyCache } from "@/lib/hourly";
 
@@ -12,7 +14,7 @@ export const dynamic = "force-dynamic";
 const MAX_BYTES = 5 * 1024 * 1024;
 
 export const POST = handler(async (req: Request) => {
-  await requireUser("ADMIN");
+  await requireUser("SUPER_ADMIN");
   let form: FormData;
   try {
     form = await req.formData();
@@ -46,10 +48,19 @@ export const POST = handler(async (req: Request) => {
     ),
   );
   hourlyCache.clear();
+  const resolved = await resolveOffices(prisma);
 
   const updated = parsed.rows.filter((r) => existing.has(r.code)).length;
   return NextResponse.json({
-    data: { inserted: parsed.rows.length - updated, updated, skipped: parsed.skipped },
+    data: {
+      inserted: parsed.rows.length - updated,
+      updated,
+      skipped: parsed.skipped,
+      /** Alarms / orphan clears whose office changed. */
+      reassigned: resolved.alarms + resolved.orphans,
+      /** Site Master office names with no matching Gmail office label (alarms keep the mail label). */
+      unmappedOffices: await unmappedSiteMasterOffices(prisma),
+    },
     meta: { fileName: file.name },
   });
 });

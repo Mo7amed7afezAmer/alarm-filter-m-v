@@ -5,7 +5,7 @@ import { filterHourlyRows, hourlyFacets, parseHourlySort, sortHourlyRows } from 
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { handler, HttpError, requireUser } from "@/lib/api";
-import { checkGmailId, getReport, parseFilters } from "@/lib/hourly";
+import { checkGmailId, getReport, parseFilters, scopeRows } from "@/lib/hourly";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +25,8 @@ export const GET = handler(async (req: Request, ctx: { params: { gmailId: string
   const sort = parseHourlySort(sp.get("sort"));
 
   const report = await getReport(id, session.user.role);
-  const rows = sortHourlyRows(filterHourlyRows(report.rows, filters), sort);
+  const visible = await scopeRows(report.rows, Number(session.user.id));
+  const rows = sortHourlyRows(filterHourlyRows(visible, filters), sort);
   const { page, limit } = p.data;
   return NextResponse.json({
     data: rows.slice((page - 1) * limit, page * limit),
@@ -35,7 +36,7 @@ export const GET = handler(async (req: Request, ctx: { params: { gmailId: string
       limit,
       pages: Math.max(1, Math.ceil(rows.length / limit)),
       report: report.meta,
-      ...(sp.get("facets") === "1" ? { facets: hourlyFacets(report.rows) } : {}),
+      ...(sp.get("facets") === "1" ? { facets: hourlyFacets(visible) } : {}),
     },
   });
 });

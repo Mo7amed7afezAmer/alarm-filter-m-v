@@ -23,7 +23,11 @@ vi.mock("next-auth", async (orig) => ({
   getServerSession: async () => session.current,
 }));
 
-const as = (role: "VIEWER" | "OPERATOR" | "ADMIN") => (session.current = { user: { role, id: "1" } });
+const PREFIX = "ZZ-HOURLYTEST";
+// Office users of the fixture's office; the super admin sees every office.
+const OFFICE = "DN/Kafr ElDawar";
+let users: import("../../../test-users").TestUsers;
+const as = (role: keyof typeof users) => (session.current = { user: { role, id: users[role] } });
 
 type Params = { gmailId: string; code: string };
 type Handler = (req: Request, ctx: { params: Params }) => Promise<Response>;
@@ -58,6 +62,7 @@ describe.skipIf(!url || !hasFixtures)("hourly report routes", () => {
     ({ POST: importPOST } = await import("../site-master/import/route"));
     ({ GET: siteGET } = await import("../site-master/route"));
     ({ PUT: sitePUT } = await import("../site-master/[code]/route"));
+    users = await (await import("../../../test-users")).createTestUsers(prisma, PREFIX, OFFICE);
 
     if ((await prisma.hourlyNormalization.count()) === 0) {
       const { DEFAULT_HOURLY_NORMALIZATIONS } = await import("@alarm/core");
@@ -72,9 +77,10 @@ describe.skipIf(!url || !hasFixtures)("hourly report routes", () => {
     if (seededNormalizations) await prisma.hourlyNormalization.deleteMany();
     hourlyCache.clear();
     (await import("@/lib/gmail")).setHourlySource(undefined);
+    await (await import("../../../test-users")).removeTestUsers(prisma, PREFIX);
   });
 
-  it("imports SiteMaster (admin only) with an upsert summary", async () => {
+  it("imports SiteMaster (super admin only) with an upsert summary", async () => {
     const { readFile } = await import("node:fs/promises");
     const data = await readFile(SITE_MASTER);
     const body = () => {
@@ -85,8 +91,10 @@ describe.skipIf(!url || !hasFixtures)("hourly report routes", () => {
 
     as("OPERATOR");
     expect((await call(importPOST, "/api/site-master/import", { method: "POST", body: body() })).status).toBe(403);
+    as("ADMIN"); // office admin
+    expect((await call(importPOST, "/api/site-master/import", { method: "POST", body: body() })).status).toBe(403);
 
-    as("ADMIN");
+    as("SUPER_ADMIN");
     const { parseSiteMasterXlsx } = await import("@alarm/core/hourly");
     importedCodes = (await parseSiteMasterXlsx(data)).rows.map((r) => r.code);
     await prisma.siteMaster.deleteMany({ where: { code: { in: importedCodes } } });
@@ -152,9 +160,14 @@ describe.skipIf(!url || !hasFixtures)("hourly report routes", () => {
     expect(office.body.meta.total).toBeGreaterThan(0);
     expect(office.body.data.every((r: { office: string }) => r.office === "KAFR EL DAWAR")).toBe(true);
 
+    // A viewer of Kafr ElDawar sees only that office's rows; the super admin sees every row.
+    const mine = await call(rowsGET, `/x?limit=500`, undefined, { gmailId });
+    expect(mine.body.meta.total).toBe(office.body.meta.total);
+    as("SUPER_ADMIN");
     const all = await call(rowsGET, `/x?limit=500&page=1`, undefined, { gmailId });
     expect(all.body.meta.total).toBe(2285);
     expect(all.body.data).toHaveLength(500);
+    as("VIEWER");
 
     const both = await call(
       rowsGET,
@@ -206,7 +219,7 @@ describe.skipIf(!url || !hasFixtures)("hourly report routes", () => {
     as("VIEWER");
     expect((await call(diffGET, `/x?a=${gmailId}&b=${gmailId}`)).status).toBe(400);
 
-    as("ADMIN");
+    as("SUPER_ADMIN");
     const put = await call(
       sitePUT,
       "/x",

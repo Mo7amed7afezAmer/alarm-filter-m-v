@@ -11,12 +11,8 @@ function int(name: string, fallback: number): number {
 export const config = {
   alarmTz: process.env.ALARM_TZ || "Africa/Cairo",
   gmailQuery: process.env.GMAIL_QUERY?.trim() || undefined,
-  /** Comma-separated Gmail labels to read, e.g. "dn-kafr-eldawar,dn-other". Empty = whole mailbox. */
-  gmailLabels: (process.env.GMAIL_LABELS ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean),
-  /** Parent labels whose children are offices offered in /settings. */
+  /** Parent labels whose children are offices ("DN/Tanta"): a message's office is its first
+   *  label under one of them. The worker always reads the whole mailbox. */
   officeParents: (process.env.OFFICE_LABEL_PARENTS ?? "DN,DS")
     .split(",")
     .map((s) => s.trim())

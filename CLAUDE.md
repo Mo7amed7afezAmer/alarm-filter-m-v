@@ -29,7 +29,7 @@ LAN at `http://<host-ip>:3000`. No cloud services except Gmail API itself. Zero 
 | Worker | Node 20 long-running process, `node-cron` every 1 min, in-process lock + `pg_advisory_xact_lock`; exposes `GET /health` on :4000 |
 | Web + API | Next.js 14 (App Router), API = Route Handlers under `app/api/*`, `next start` on :3000, `HOSTNAME=0.0.0.0` |
 | DB | PostgreSQL 16 container, data in named volume `pgdata`; Prisma ORM |
-| Auth | NextAuth (Credentials provider), JWT sessions, roles `viewer` / `admin` |
+| Auth | NextAuth (Credentials provider), JWT sessions, roles `viewer` / `operator` / `admin` (office admin) / `super_admin` (2026-10-20) |
 | UI | React + Tailwind + shadcn/ui, TanStack Table, Recharts |
 | Excel export | `exceljs` |
 | Gmail | `googleapis` npm, OAuth2 Desktop client; `token.json` mounted read-only into worker |
@@ -226,8 +226,8 @@ ADMIN_EMAIL=admin@local
 ADMIN_PASSWORD=
 ALARM_TZ=Africa/Cairo
 ALERT_HOURS=4
-GMAIL_QUERY=            # optional Gmail search filter, e.g. from:alarms@vendor.com
-GMAIL_LABELS=dn-kafr-eldawar   # comma-separated labels the worker reads (search form); empty = all mail
+GMAIL_QUERY=            # optional Gmail search filter (first-run/backfill listing only)
+OFFICE_LABEL_PARENTS=DN,DS     # the worker reads ALL mail; office = first label under these parents
 ```
 
 ## 13. Mobile (PWA first, Expo optional)
@@ -465,7 +465,8 @@ Notes:
   `raw_messages.body`, and reads only `GMAIL_LABELS` (history.list per labelId +
   messages.list `(label:a OR label:b)`). User approved wiping raw_messages/alarms/orphan_clears
   (9,188 / 2,516 rows) and re-syncing; rules + users kept. More labels: user to send names.
-- **Office selection (2026-10-12, user request):** offices = Gmail labels under `DN/` and `DS/`
+- **Office selection (2026-10-12, user request; superseded 2026-10-20 — see "All mail, offices
+  and roles"):** offices = Gmail labels under `DN/` and `DS/`
   (DN: Damanhour, Dumiat, Kafr ElDawar, Kafr ElSheikh, Mansoura, Port Said, Tanta; DS: Benha,
   Dyrb Negm, Faqous, Huawei, Sadat, Shebin, Zagazig). The worker refreshes the list into
   `system_status.availableLabels` every 10 min (`OFFICE_LABEL_PARENTS`, default `DN,DS`).
@@ -500,6 +501,40 @@ Notes:
   in memory ("Unknown field … on model SystemStatus").
 - On Windows, `prisma generate` fails with EPERM while `next dev` holds the query-engine DLL —
   stop the dev server first.
+- **All mail, offices and roles (2026-10-20, user request):**
+  - Worker reads the WHOLE mailbox (inbox, archived, every label; no spam/trash/sent/drafts) —
+    `GMAIL_LABELS` is gone. Every message stores `raw_messages.labels` (display names, noise like
+    UNREAD/CATEGORY_* dropped) and `office` = its first label under `OFFICE_LABEL_PARENTS`
+    (null for inbox-only mail). `system_status.syncedLabel = "*"` once the whole mailbox is
+    synced; anything else forces one 24h backfill. Labels added AFTER a message was stored are
+    not picked up (history reads messageAdded only).
+  - Speed (2026-10-21, user report "very slow"): each run fetches the NEWEST unknown messages
+    first (older backlog follows), so current alarms never wait behind a backfill. The Gmail
+    project allows only ~110 messages.get per minute ("Units per minute per user"), so the
+    per-run cap adapts (`nextFetchCap`: just under what Gmail allowed on a quota hit, +10% per
+    clean full run, halved when listing itself hits the quota, ≥ 20, ≤ MAX_MESSAGES_PER_RUN).
+    A quota hit is a pause, not an error (lastError stays null).
+  - Office of an alarm (`alarms.office`, what every page filters on) = the Site Master office of
+    `siteCode` (= siteCodeOf(site)), mapped to the Gmail office label by `officeMatchKey`
+    ("KAFR EL DAWAR" ↔ "DN/Kafr ElDawar": last "/" segment, letters only, upper-case); when the
+    code is not in Site Master (or its office matches no label) → `mailOffice` (the mail label).
+    Kept by `@alarm/db resolveOffices()`: worker after each batch (new rows) and after reprocess,
+    Site Master import/edit (whole table), office label list change. Orphan clears the same way.
+    Import response lists `unmappedOffices` (Site Master names without a label).
+  - Roles: VIEWER < OPERATOR < ADMIN (office admin) < SUPER_ADMIN. `users.office` = the office a
+    viewer/operator/admin belongs to (sees ONLY it; none = sees nothing); for the super admin it
+    is the office being viewed (null = all offices, picked in /settings "Office view").
+    Office admin: /settings shows only Users — list/create/delete/reset viewers + operators of
+    their own office (404 for others). Super admin: everything (Gmail, rules, display filter,
+    reprocess, Site Master, normalizations, all users/offices). Pure rules in
+    `apps/web/lib/roles.ts` (unit-tested). `requireUser()` and the (app) layout read role + office
+    from the DB on every request, so changes apply at once and deleted accounts get 401.
+  - Hourly reports + Site Master list are office-scoped too (rows whose Site Master office is the
+    user's office; unknown codes hidden from office users).
+  - Migration converts existing ADMIN accounts to SUPER_ADMIN and gives every account the
+    previously selected `officeLabel`; seed creates ADMIN_EMAIL as SUPER_ADMIN. Office admins are
+    created by the super admin in /settings → Users (role "office admin" + office).
+  - Integration tests use real accounts from `apps/web/test-users.ts` (requireUser reads the DB).
 - Gmail access uses `@googleapis/gmail` + `google-auth-library` (same API as `googleapis`,
   far smaller — keeps the worker image < 200MB). Scope: gmail.readonly.
 - Gmail account: de.alarms@mobi-egypt.com (Workspace). OAuth app is in Testing mode with this

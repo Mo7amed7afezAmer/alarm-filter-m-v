@@ -48,20 +48,20 @@ export async function effectiveDisplayFilter(userId?: number): Promise<DisplayFi
   };
 }
 
-/** Prisma condition: current office AND not hidden (by the admin or by this user).
+/** Prisma condition: the user's office scope AND not hidden (by the admin or by this user).
  *  Combine with other conditions via AND. */
 export async function alarmScope(userId?: number): Promise<Prisma.AlarmWhereInput> {
-  const [office, f] = await Promise.all([getOffice(), effectiveDisplayFilter(userId)]);
+  const [office, f] = await Promise.all([getOffice(userId), effectiveDisplayFilter(userId)]);
   const and: Prisma.AlarmWhereInput[] = [];
-  if (office) and.push({ office });
+  if (office !== null) and.push({ office }); // "" (no office) matches nothing
   if (f.hiddenCategories.length) and.push({ category: { notIn: f.hiddenCategories } });
   if (f.hiddenAlarmNames.length) and.push({ alarmName: { notIn: f.hiddenAlarmNames } });
   return { AND: and };
 }
 
-/** Same scope as raw-SQL fragments for $queryRaw (alarms table). */
+/** Same scope as raw-SQL fragments for $queryRaw (alarms table). office null = all offices. */
 export async function alarmScopeSql(userId?: number) {
-  const [office, f] = await Promise.all([getOffice(), effectiveDisplayFilter(userId)]);
+  const [office, f] = await Promise.all([getOffice(userId), effectiveDisplayFilter(userId)]);
   return { office, hiddenCategories: f.hiddenCategories, hiddenAlarmNames: f.hiddenAlarmNames };
 }
 

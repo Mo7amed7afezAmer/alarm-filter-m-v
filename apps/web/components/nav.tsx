@@ -18,6 +18,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { ROLE_LABEL } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { useAppConfig } from "./app-config";
 import { NotificationBell } from "./notification-bell";
@@ -53,7 +54,7 @@ export function Nav() {
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [path]); // close the mobile menu after navigating
 
-  const links = LINKS.filter((l) => !l.admin || role === "ADMIN");
+  const links = LINKS.filter((l) => !l.admin || role === "ADMIN" || role === "SUPER_ADMIN");
   const isActive = (href: string) => path.startsWith(href);
 
   return (
@@ -68,7 +69,11 @@ export function Nav() {
           </span>
           <span className="hidden sm:inline">Alarm Filter</span>
         </Link>
-        {office && <OfficePill office={office} />}
+        {office ? (
+          <OfficePill office={office} />
+        ) : (
+          <OfficePill office={office === null ? "All offices" : "No office assigned"} />
+        )}
 
         <nav className="hidden items-center gap-1 md:flex">
           {links.map(({ href, label, icon: Icon }) => (
@@ -102,7 +107,7 @@ export function Nav() {
           <div className="hidden items-center gap-3 md:flex">
             <div className="text-right leading-tight">
               <div className="max-w-[16rem] truncate text-sm text-slate-700">{email}</div>
-              <div className="text-xs capitalize text-slate-500">{role.toLowerCase()}</div>
+              <div className="text-xs capitalize text-slate-500">{ROLE_LABEL[role]}</div>
             </div>
             <button
               className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-sm text-slate-600 hover:bg-slate-100"
@@ -152,7 +157,7 @@ export function Nav() {
             </Link>
             <div className="mt-1 flex items-center justify-between border-t border-slate-100 px-3 pt-3 text-sm">
               <span className="truncate text-slate-500">
-                {email} · {role.toLowerCase()}
+                {email} · {ROLE_LABEL[role]}
               </span>
               <button
                 className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-slate-600"

@@ -3,6 +3,7 @@ import { getServerSession, type Session } from "next-auth";
 import { NextResponse } from "next/server";
 import { z, type ZodTypeAny } from "zod";
 import { authOptions, hasRole, type Role } from "./auth";
+import { prisma } from "./db";
 
 export class HttpError extends Error {
   constructor(
@@ -14,12 +15,27 @@ export class HttpError extends Error {
   }
 }
 
-/** Throws 401 when not signed in, 403 when the user's role is below `role`. */
+const FORBIDDEN: Partial<Record<Role, string>> = {
+  ADMIN: "Admin only",
+  SUPER_ADMIN: "Super admin only",
+};
+
+/**
+ * Throws 401 when not signed in (or the account was deleted), 403 when the user's role is below
+ * `role`. Role and office are read from the users table, so a change applies immediately.
+ */
 export async function requireUser(role?: Role): Promise<Session> {
   const session = await getServerSession(authOptions);
   if (!session?.user) throw new HttpError(401, "Not signed in");
-  if (role && !hasRole(session.user.role, role))
-    throw new HttpError(403, role === "ADMIN" ? "Admin only" : `${role.toLowerCase()} role required`);
+  const user = await prisma.user.findUnique({
+    where: { id: Number(session.user.id) || -1 },
+    select: { role: true, office: true },
+  });
+  if (!user) throw new HttpError(401, "Account no longer exists — sign in again");
+  session.user.role = user.role;
+  session.user.office = user.office;
+  if (role && !hasRole(user.role, role))
+    throw new HttpError(403, FORBIDDEN[role] ?? `${role.toLowerCase()} role required`);
   return session;
 }
 

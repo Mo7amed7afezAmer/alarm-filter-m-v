@@ -29,7 +29,7 @@ function dayBound(day: string, timeZone: string, end: boolean): string {
 
 function ReportsView() {
   const { timeZone, role } = useAppConfig();
-  const canProcess = role === "OPERATOR" || role === "ADMIN";
+  const canProcess = role !== "VIEWER";
   const { params, set } = useUrlFilters();
   const from = params.get("from") ?? "";
   const to = params.get("to") ?? "";

@@ -5,10 +5,13 @@ import { createContext, useContext, type ReactNode } from "react";
 export interface AppConfig {
   timeZone: string;
   alertHours: number;
-  role: "VIEWER" | "OPERATOR" | "ADMIN";
+  role: "VIEWER" | "OPERATOR" | "ADMIN" | "SUPER_ADMIN";
   email: string;
-  /** Selected office (Gmail label), e.g. "DN/Kafr ElDawar". */
+  /** Office whose data the pages show, e.g. "DN/Kafr ElDawar"; null = all offices (super
+   *  admin); "" = none (account without an office). */
   office: string | null;
+  /** users.office: the account's office (super admin: the office being viewed). */
+  homeOffice: string | null;
   /** Number of alarm types (categories + names) hidden in /settings. */
   hiddenTypes: number;
   /** Number of alarm types this user hides from their own pages (/preferences). */

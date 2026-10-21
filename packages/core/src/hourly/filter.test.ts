@@ -8,7 +8,7 @@ import {
   sortHourlyRows,
 } from "./filter.js";
 import { row } from "./test-fixtures.js";
-import { officeColor, type HourlyRow } from "./types.js";
+import { officeColor, officeMatchKey, type HourlyRow } from "./types.js";
 
 const rows = [
   row({ id: 0, alarmTime: "2026-10-13 06:00:00" }),
@@ -86,5 +86,12 @@ describe("facets, diff, colors", () => {
     expect(officeColor("KAFR EL DAWAR")).not.toBe(officeColor("DAMANHOUR"));
     expect(officeColor("SOME NEW OFFICE")).toMatch(/^[0-9A-F]{6}$/);
     expect(officeColor("")).toBeNull();
+  });
+
+  it("officeMatchKey links a Gmail office label to the Site Master office name", () => {
+    expect(officeMatchKey("DN/Kafr ElDawar")).toBe(officeMatchKey("KAFR EL DAWAR"));
+    expect(officeMatchKey("DS/Dyrb Negm")).toBe("DYRBNEGM");
+    expect(officeMatchKey("DN/Tanta")).not.toBe(officeMatchKey("DAMANHOUR"));
+    expect(officeColor("DN/Kafr ElDawar")).toBe(officeColor("KAFR EL DAWAR"));
   });
 });

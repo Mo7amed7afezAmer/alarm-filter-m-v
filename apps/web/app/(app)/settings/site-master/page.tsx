@@ -359,8 +359,8 @@ function NormalizationsCard() {
 function SiteMasterView() {
   const { role } = useAppConfig();
   const [reloadKey, setReloadKey] = useState(0);
-  if (role !== "ADMIN")
-    return <p className="text-sm text-slate-600">Site Master is managed by admins.</p>;
+  if (role !== "SUPER_ADMIN")
+    return <p className="text-sm text-slate-600">Site Master is managed by the super admin.</p>;
   return (
     <>
       <PageHeader

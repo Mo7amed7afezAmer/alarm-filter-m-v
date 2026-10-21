@@ -4,7 +4,7 @@
  *   so edits made in the UI survive re-runs
  * - SystemStatus row id=1
  * - hourly report normalizations (§14) — only when that table is empty
- * - admin user from ADMIN_EMAIL / ADMIN_PASSWORD — created once, never overwritten,
+ * - super admin from ADMIN_EMAIL / ADMIN_PASSWORD — created once, never overwritten,
  *   password never printed
  */
 import { PrismaClient, type Category } from "@prisma/client";
@@ -59,23 +59,23 @@ async function seedAdmin() {
   const email = process.env.ADMIN_EMAIL?.trim();
   const password = process.env.ADMIN_PASSWORD ?? "";
   if (!email) {
-    console.log("admin: ADMIN_EMAIL not set, skipping");
+    console.log("super admin: ADMIN_EMAIL not set, skipping");
     return;
   }
   if (await prisma.user.findUnique({ where: { email } })) {
-    console.log(`admin: ${email} already exists, leaving as-is`);
+    console.log(`super admin: ${email} already exists, leaving as-is`);
     return;
   }
   if (password.length < 8) {
     console.log(
-      "admin: ADMIN_PASSWORD missing or shorter than 8 chars — set it in .env and re-run migrate",
+      "super admin: ADMIN_PASSWORD missing or shorter than 8 chars — set it in .env and re-run migrate",
     );
     return;
   }
   await prisma.user.create({
-    data: { email, passwordHash: await bcrypt.hash(password, 12), role: "ADMIN" },
+    data: { email, passwordHash: await bcrypt.hash(password, 12), role: "SUPER_ADMIN" },
   });
-  console.log(`admin: created ${email}`);
+  console.log(`super admin: created ${email}`);
 }
 
 async function main() {

@@ -9,7 +9,7 @@ const query = z.object({ days: z.coerce.number().int().min(1).max(90).default(7)
 
 /** Queues a rebuild; the worker runs it on its next tick and clears reprocessDays. */
 export const POST = handler(async (req: Request) => {
-  await requireUser("ADMIN");
+  await requireUser("SUPER_ADMIN");
   const { days } = parseQuery(req, query);
   await prisma.systemStatus.upsert({
     where: { id: 1 },

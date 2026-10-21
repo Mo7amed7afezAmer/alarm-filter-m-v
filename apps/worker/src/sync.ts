@@ -2,7 +2,7 @@
 import type { MailSource } from "./gmail.js";
 
 export interface SyncPlan {
-  /** Ids to fetch now (≤ maxPerRun), oldest first. */
+  /** Ids to fetch now (≤ maxPerRun): the NEWEST unknown ones, listed oldest first. */
   ids: string[];
   /** historyId to store after this run, or null to keep the current one. Only set once every
    *  discovered message is stored — otherwise the next run re-lists and continues the backlog. */
@@ -50,7 +50,9 @@ export async function planSync(
 
   const known = await isKnown(ids);
   const unknown = ids.filter((id) => !known.has(id));
-  const batch = unknown.slice(0, opts.maxPerRun);
+  // Newest first: current alarms show up at once while a backlog is still being worked off
+  // (older mail follows in later runs; the engine handles out-of-order alarms/clears).
+  const batch = opts.maxPerRun > 0 ? unknown.slice(-opts.maxPerRun) : [];
   const drained = unknown.length <= opts.maxPerRun;
 
   return {

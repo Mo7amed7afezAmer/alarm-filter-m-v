@@ -60,13 +60,14 @@ describe("planSync", () => {
 
   it("caps at maxPerRun and does NOT advance historyId until the backlog is drained", async () => {
     const plan = await planSync(fakeSource(), "100", none, { ...opts, maxPerRun: 2 });
-    expect(plan).toMatchObject({ ids: ["a", "b"], nextHistoryId: null, backlog: 1 });
+    // Newest first, so current mail is never stuck behind a backlog.
+    expect(plan).toMatchObject({ ids: ["b", "c"], nextHistoryId: null, backlog: 1 });
 
-    // Next run: a and b are now stored → c is fetched and the historyId advances.
-    const next = await planSync(fakeSource(), "100", async () => new Set(["a", "b"]), {
+    // Next run: b and c are now stored → a is fetched and the historyId advances.
+    const next = await planSync(fakeSource(), "100", async () => new Set(["b", "c"]), {
       ...opts,
       maxPerRun: 2,
     });
-    expect(next).toMatchObject({ ids: ["c"], nextHistoryId: "200", backlog: 0 });
+    expect(next).toMatchObject({ ids: ["a"], nextHistoryId: "200", backlog: 0 });
   });
 });

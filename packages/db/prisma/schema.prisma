@@ -30,7 +30,10 @@ enum Role {
   VIEWER
   /// Viewer + may trigger on-demand processing (hourly reports).
   OPERATOR
+  /// Office admin: manages the viewers/operators of their own office; sees that office only.
   ADMIN
+  /// Every office, every setting (Gmail, rules, Site Master, reprocess) and every user.
+  SUPER_ADMIN
 }
 
 /// Every Gmail message seen, parseable or not. Source of truth for reprocess().
@@ -42,8 +45,11 @@ model RawMessage {
   receivedAt  DateTime
   /// Plain-text email body (alarm details incl. CONSEC_NBR, cell name). Null for old rows.
   body        String?
-  /// Office = Gmail label the message was read from, e.g. "DN/Kafr ElDawar".
+  /// Office label of the message: its first label under OFFICE_LABEL_PARENTS (DN/, DS/),
+  /// e.g. "DN/Kafr ElDawar"; null when it has none (inbox only).
   office      String?
+  /// Every Gmail label of the message (display names: "INBOX", "DN/Kafr ElDawar", …).
+  labels      String[]  @default([])
   parseError  String?
   processedAt DateTime?
 
@@ -69,7 +75,13 @@ model Alarm {
   consecNbr   String?     @unique
   cellName    String?
   device      String?
+  /// Office the alarm belongs to (what every page filters on): the Site Master office of
+  /// `siteCode` (mapped to its Gmail label), else `mailOffice`. Kept by resolveOffices().
   office      String?
+  /// Office label of the alarm mail (raw_messages.office).
+  mailOffice  String?
+  /// Site code = last "_" segment of `site` (join key to site_master).
+  siteCode    String?
   createdAt   DateTime    @default(now())
 
   // Not unique any more: different cells can share alarmKey-without-cell + time; identity is consecNbr.
@@ -77,6 +89,7 @@ model Alarm {
   @@index([status, category])
   @@index([office, status])
   @@index([site])
+  @@index([siteCode])
   @@map("alarms")
 }
 
@@ -87,7 +100,9 @@ model OrphanClear {
   clearTime    DateTime
   rawMessageId Int
   consecNbr    String?
+  /// Resolved like alarms.office (Site Master first, then the mail label).
   office       String?
+  mailOffice   String?
   rawMessage   RawMessage @relation(fields: [rawMessageId], references: [id], onDelete: Cascade)
 
   @@index([alarmKey])
@@ -119,6 +134,10 @@ model User {
   email               String    @unique
   passwordHash        String
   role                Role      @default(VIEWER)
+  /// VIEWER / OPERATOR / ADMIN: the office (Gmail label) this user belongs to — they see only
+  /// it; null = no office yet (sees nothing). SUPER_ADMIN: the office currently viewed
+  /// (null = all offices).
+  office              String?
   /// Notification preferences (see packages/core/src/notify.ts). Null = defaults (DOWN only).
   notifyPrefs         Json?
   /// Notifications for alarms created after this are unread.
@@ -136,9 +155,9 @@ model SystemStatus {
   lastError       String?
   lastRunMessages Int       @default(0)
   reprocessDays   Int?
-  /// Selected office (Gmail label display name). Chosen in /settings; worker reads it.
+  /// Legacy (before 2026-10-20 the worker read one office label). Unused.
   officeLabel     String?
-  /// Office label the current lastHistoryId belongs to — a change forces a fresh backfill.
+  /// What lastHistoryId belongs to: "*" = whole mailbox. Anything else forces a fresh backfill.
   syncedLabel     String?
   /// Gmail labels offered in /settings, refreshed by the worker: [{ name }].
   availableLabels Json?
@@ -147,6 +166,29 @@ model SystemStatus {
   displayFilter   Json?
 
   @@map("system_status")
+}
+
+/// The Gmail mailbox the worker and the hourly reports read (one row, id=1), connected from
+/// /settings/gmail. Overrides credentials.json / token.json when its fields are set.
+/// The refresh token is never returned by any API.
+model GmailAccount {
+  id           Int       @id @default(1)
+  /// OAuth "Desktop app" client uploaded in the UI; null = use credentials.json.
+  clientId     String?
+  clientSecret String?
+  /// Mailbox address (users.getProfile) of the connected account.
+  email        String?
+  refreshToken String?
+  scope        String?
+  connectedAt  DateTime?
+  /// E-mail of the admin who connected it.
+  connectedBy  String?
+  lastCheckAt  DateTime?
+  lastCheckOk  Boolean?
+  lastCheckMsg String?
+  updatedAt    DateTime  @updatedAt
+
+  @@map("gmail_account")
 }
 
 /// Site enrichment for hourly reports (§14). Imported from an uploaded xlsx, upserted by code.

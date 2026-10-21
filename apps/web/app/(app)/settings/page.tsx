@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2 } from "lucide-react";
+import { Building2, Mail } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAppConfig } from "@/components/app-config";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/page-header";
 import { TypesVisibilityEditor } from "@/components/types-visibility-editor";
 import { usePoll } from "@/components/use-poll";
+import { ROLE_LABEL, ROLES, type Role } from "@/lib/roles";
 
 type Category = "DOWN" | "POWER" | "OTHER";
 interface Rule {
@@ -20,7 +21,8 @@ interface Rule {
 interface User {
   id: number;
   email: string;
-  role: "VIEWER" | "OPERATOR" | "ADMIN";
+  role: Role;
+  office: string | null;
 }
 
 async function send(url: string, method: string, body?: unknown) {
@@ -187,9 +189,13 @@ function Reprocess() {
 }
 
 function Users() {
-  const { email: me } = useAppConfig();
-  const { data, reload } = usePoll<{ users: User[] }>("/api/users", 0);
-  const [form, setForm] = useState({ email: "", password: "", role: "VIEWER" as User["role"] });
+  const { email: me, role: myRole, homeOffice } = useAppConfig();
+  const isSuper = myRole === "SUPER_ADMIN";
+  const roles: Role[] = isSuper ? [...ROLES] : ["VIEWER", "OPERATOR"];
+  const { data, reload } = usePoll<{ users: User[]; offices: string[] }>("/api/users", 0);
+  const offices = data?.offices ?? [];
+  const emptyForm = { email: "", password: "", role: "VIEWER" as Role, office: "" };
+  const [form, setForm] = useState(emptyForm);
   const [msg, setMsg] = useState<string | null>(null);
 
   async function run(fn: () => Promise<unknown>, ok: string) {
@@ -208,75 +214,123 @@ function Users() {
       <CardHeader>
         <CardTitle className="text-base">Users</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Viewers can see all pages; operators can also process hourly reports; admins can
-          also edit rules, users, Site Master and reprocess.
+          {isSuper ? (
+            <>
+              Viewers see their office only; operators can also process hourly reports; office
+              admins add and remove the viewers/operators of their office. The super admin sees
+              every office and manages everything.
+            </>
+          ) : (
+            <>
+              Accounts of <span className="font-medium">{homeOffice ?? "your office"}</span>. They
+              see this office only; operators can also process hourly reports.
+            </>
+          )}
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="-mx-1 overflow-x-auto">
-          <table className="w-full min-w-[28rem] text-sm">
+          <table className="w-full min-w-[34rem] text-sm">
             <thead className="text-left text-xs text-muted-foreground">
               <tr>
                 <th className="py-1">Email</th>
                 <th>Role</th>
+                {isSuper && <th>Office</th>}
                 <th />
               </tr>
             </thead>
             <tbody>
-              {(data?.users ?? []).map((u) => (
-                <tr key={u.id} className="border-t">
-                  <td className="py-2">{u.email}</td>
-                  <td>
-                    <select
-                      className="h-8 rounded-md border bg-background px-2"
-                      value={u.role}
-                      disabled={u.email === me}
-                      onChange={(e) =>
-                        void run(
-                          () => send("/api/users", "PATCH", { id: u.id, role: e.target.value }),
-                          `Updated ${u.email}`,
-                        )
-                      }
-                    >
-                      <option value="VIEWER">viewer</option>
-                      <option value="OPERATOR">operator</option>
-                      <option value="ADMIN">admin</option>
-                    </select>
-                  </td>
-                  <td className="space-x-1 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        const pw = window.prompt(`New password for ${u.email} (min 8 characters)`);
-                        if (pw)
+              {(data?.users ?? []).map((u) => {
+                const self = u.email === me;
+                return (
+                  <tr key={u.id} className="border-t">
+                    <td className="py-2">{u.email}</td>
+                    <td>
+                      <select
+                        className="h-8 rounded-md border bg-background px-2"
+                        value={u.role}
+                        disabled={self}
+                        onChange={(e) =>
                           void run(
-                            () => send("/api/users", "PATCH", { id: u.id, password: pw }),
-                            `Password reset for ${u.email}`,
-                          );
-                      }}
-                    >
-                      Reset password
-                    </Button>
-                    {u.email !== me && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-600"
-                        onClick={() => {
-                          if (window.confirm(`Delete ${u.email}?`))
-                            void run(
-                              () => send(`/api/users?id=${u.id}`, "DELETE"),
-                              `Deleted ${u.email}`,
-                            );
-                        }}
+                            () => send("/api/users", "PATCH", { id: u.id, role: e.target.value }),
+                            `Updated ${u.email}`,
+                          )
+                        }
                       >
-                        Delete
-                      </Button>
+                        {[...new Set([...roles, u.role])].map((r) => (
+                          <option key={r} value={r}>
+                            {ROLE_LABEL[r]}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    {isSuper && (
+                      <td>
+                        <select
+                          className="h-8 max-w-[12rem] rounded-md border bg-background px-2"
+                          value={u.office ?? ""}
+                          disabled={self || u.role === "SUPER_ADMIN"}
+                          onChange={(e) =>
+                            void run(
+                              () =>
+                                send("/api/users", "PATCH", {
+                                  id: u.id,
+                                  office: e.target.value || null,
+                                }),
+                              `Updated ${u.email}`,
+                            )
+                          }
+                        >
+                          <option value="">
+                            {u.role === "SUPER_ADMIN" ? "all offices" : "— no office —"}
+                          </option>
+                          {[...new Set([...offices, ...(u.office ? [u.office] : [])])].map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
                     )}
-                  </td>
-                </tr>
-              ))}
+                    <td className="space-x-1 text-right">
+                      {!self && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const pw = window.prompt(
+                                `New password for ${u.email} (min 8 characters)`,
+                              );
+                              if (pw)
+                                void run(
+                                  () => send("/api/users", "PATCH", { id: u.id, password: pw }),
+                                  `Password reset for ${u.email}`,
+                                );
+                            }}
+                          >
+                            Reset password
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600"
+                            onClick={() => {
+                              if (window.confirm(`Delete ${u.email}?`))
+                                void run(
+                                  () => send(`/api/users?id=${u.id}`, "DELETE"),
+                                  `Deleted ${u.email}`,
+                                );
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -286,8 +340,9 @@ function Users() {
           onSubmit={(e) => {
             e.preventDefault();
             void run(async () => {
-              await send("/api/users", "POST", form);
-              setForm({ email: "", password: "", role: "VIEWER" });
+              // Office admins: the server always uses their own office.
+              await send("/api/users", "POST", { ...form, office: form.office || null });
+              setForm(emptyForm);
             }, `Added ${form.email}`);
           }}
         >
@@ -312,12 +367,29 @@ function Users() {
           <select
             className="h-9 rounded-md border bg-background px-2 text-sm"
             value={form.role}
-            onChange={(e) => setForm({ ...form, role: e.target.value as User["role"] })}
+            onChange={(e) => setForm({ ...form, role: e.target.value as Role })}
           >
-            <option value="VIEWER">viewer</option>
-            <option value="OPERATOR">operator</option>
-            <option value="ADMIN">admin</option>
+            {roles.map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABEL[r]}
+              </option>
+            ))}
           </select>
+          {isSuper && form.role !== "SUPER_ADMIN" && (
+            <select
+              className="h-9 rounded-md border bg-background px-2 text-sm"
+              required
+              value={form.office}
+              onChange={(e) => setForm({ ...form, office: e.target.value })}
+            >
+              <option value="">Office…</option>
+              {offices.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          )}
           <Button size="sm" type="submit">
             Add user
           </Button>
@@ -330,7 +402,7 @@ function Users() {
 
 interface OfficeState {
   office: string | null;
-  syncedOffice: string | null;
+  synced: boolean;
   offices: string[];
 }
 
@@ -342,32 +414,29 @@ function splitOffice(label: string) {
     : { group: "Other", name: label };
 }
 
+const ALL = "__all__";
+
+/** Super admin only: which office the pages show (their own view; office users are fixed). */
 function OfficePicker() {
   const { data } = usePoll<OfficeState>("/api/settings/office", 15_000);
-  const [choice, setChoice] = useState("");
+  const [choice, setChoice] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (data?.office && !choice) setChoice(data.office);
-  }, [data, choice]);
+  const current = data ? (data.office ?? ALL) : null;
+  const value = choice ?? current ?? ALL;
 
   const groups = new Map<string, string[]>();
   for (const label of data?.offices ?? []) {
     const { group } = splitOffice(label);
     groups.set(group, [...(groups.get(group) ?? []), label]);
   }
-  const syncing = !!data?.office && data.office !== data.syncedOffice;
 
   async function save() {
-    if (!choice || choice === data?.office) return;
-    if (
-      !window.confirm(`Switch the system to office "${choice}"? Pages will show this office only.`)
-    )
-      return;
+    if (value === current) return;
     setBusy(true);
     setMsg(null);
     try {
-      await send("/api/settings/office", "PUT", { office: choice });
+      await send("/api/settings/office", "PUT", { office: value === ALL ? null : value });
       window.location.reload(); // header + every page re-scope to the new office
     } catch (e) {
       setMsg(`Error: ${(e as Error).message}`);
@@ -378,54 +447,51 @@ function OfficePicker() {
   return (
     <Card className="rounded-xl border-slate-200 shadow-sm">
       <CardHeader>
-        <CardTitle className="text-base">Office</CardTitle>
+        <CardTitle className="text-base">Office view</CardTitle>
         <p className="text-sm text-muted-foreground">
-          The Gmail label (office) the system reads. All pages show the selected office only; each
-          office keeps its own history.
+          The worker reads the whole mailbox (inbox and every label). An alarm belongs to the Site
+          Master office of its site code or, when the site is not in Site Master, to the office
+          label of its mail. Pick the office you want to look at; other users always see their own
+          office.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
-        {data && !data.offices.length ? (
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <select
+            className="h-9 w-full rounded-md border border-input bg-white px-2 text-sm sm:max-w-xs"
+            value={value}
+            onChange={(e) => setChoice(e.target.value)}
+          >
+            <option value={ALL}>All offices</option>
+            {[...groups].map(([group, labels]) => (
+              <optgroup key={group} label={group}>
+                {labels.map((l) => (
+                  <option key={l} value={l}>
+                    {splitOffice(l).name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <Button size="sm" onClick={() => void save()} disabled={busy || value === current}>
+            {busy ? "Switching…" : "Show this office"}
+          </Button>
+        </div>
+        {data && !data.offices.length && (
           <p className="text-sm text-amber-700">
             No office labels found yet — the worker refreshes the list every 10 minutes (labels
             under DN/ and DS/).
           </p>
-        ) : (
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <select
-              className="h-9 w-full rounded-md border border-input bg-white px-2 text-sm sm:max-w-xs"
-              value={choice}
-              onChange={(e) => setChoice(e.target.value)}
-            >
-              {!choice && <option value="">Choose an office…</option>}
-              {[...groups].map(([group, labels]) => (
-                <optgroup key={group} label={group}>
-                  {labels.map((l) => (
-                    <option key={l} value={l}>
-                      {splitOffice(l).name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-            <Button
-              size="sm"
-              onClick={() => void save()}
-              disabled={busy || !choice || choice === data?.office}
-            >
-              {busy ? "Switching…" : "Use this office"}
-            </Button>
-          </div>
         )}
-        {data?.office && (
+        {data && (
           <p className="text-sm">
-            Current: <span className="font-medium">{data.office}</span>{" "}
-            {syncing ? (
-              <span className="text-amber-700">
-                · loading the last 24h of this office (a few minutes)…
-              </span>
+            Mailbox sync:{" "}
+            {data.synced ? (
+              <span className="text-emerald-700">all mail, up to date</span>
             ) : (
-              <span className="text-emerald-700">· synced</span>
+              <span className="text-amber-700">
+                loading the last 24h of all mail (a few minutes)…
+              </span>
             )}
           </p>
         )}
@@ -436,21 +502,41 @@ function OfficePicker() {
 }
 
 export default function SettingsPage() {
-  const { role } = useAppConfig();
-  if (role !== "ADMIN")
+  const { role, homeOffice } = useAppConfig();
+  if (role === "ADMIN")
+    return (
+      <>
+        <PageHeader
+          title="Settings"
+          subtitle={`Users of ${homeOffice ?? "your office"} (office admin)`}
+        />
+        <div className="max-w-4xl">
+          <Users />
+        </div>
+      </>
+    );
+  if (role !== "SUPER_ADMIN")
     return <p className="text-sm text-muted-foreground">Settings are available to admins only.</p>;
   return (
     <>
       <PageHeader
         title="Settings"
-        subtitle="Office, classification rules, reprocessing and users (admin only)"
+        subtitle="Office view, classification rules, reprocessing and users (super admin)"
         actions={
-          <Button size="sm" variant="outline" className="bg-white" asChild>
-            <Link href="/settings/site-master">
-              <Building2 className="h-4 w-4" />
-              Site Master (hourly reports)
-            </Link>
-          </Button>
+          <>
+            <Button size="sm" variant="outline" className="bg-white" asChild>
+              <Link href="/settings/gmail">
+                <Mail className="h-4 w-4" />
+                Gmail connection
+              </Link>
+            </Button>
+            <Button size="sm" variant="outline" className="bg-white" asChild>
+              <Link href="/settings/site-master">
+                <Building2 className="h-4 w-4" />
+                Site Master (hourly reports)
+              </Link>
+            </Button>
+          </>
         }
       />
       <OfficePicker />

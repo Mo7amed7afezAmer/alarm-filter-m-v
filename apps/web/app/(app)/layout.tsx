@@ -5,7 +5,8 @@ import { AppConfigProvider } from "@/components/app-config";
 import { HiddenTypesNote } from "@/components/hidden-types-note";
 import { Nav } from "@/components/nav";
 import { authOptions } from "@/lib/auth";
-import { getOffice } from "@/lib/office";
+import { prisma } from "@/lib/db";
+import { scopeOfficeOf } from "@/lib/roles";
 import { getDisplayFilter, getUserDisplayFilter, hiddenCount } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
@@ -13,12 +14,20 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect("/login");
+  // Role + office from the database: a change by an admin applies on the next page load.
+  const user = await prisma.user.findUnique({
+    where: { id: Number(session.user.id) || -1 },
+    select: { role: true, office: true },
+  });
+  if (!user) redirect("/login");
   const config = {
     timeZone: process.env.ALARM_TZ || "Africa/Cairo",
     alertHours: Number(process.env.ALERT_HOURS) || 4,
-    role: session.user.role,
+    role: user.role,
     email: session.user.email ?? "",
-    office: await getOffice(),
+    office: scopeOfficeOf(user),
+    /** The user's assigned office (super admin: the office they are viewing). */
+    homeOffice: user.office,
     hiddenTypes: hiddenCount(await getDisplayFilter()),
     myHiddenTypes: hiddenCount(await getUserDisplayFilter(Number(session.user.id))),
   };

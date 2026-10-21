@@ -3,7 +3,7 @@
 import { diffHourly, filterHourlyRows, parseHourlySort, sortHourlyRows } from "@alarm/core";
 import { NextResponse } from "next/server";
 import { handler, HttpError, requireUser } from "@/lib/api";
-import { checkGmailId, getReport, parseFilters } from "@/lib/hourly";
+import { checkGmailId, getReport, parseFilters, scopeRows } from "@/lib/hourly";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +22,11 @@ export const GET = handler(async (req: Request) => {
     getReport(checkGmailId(a), session.user.role),
     getReport(checkGmailId(b), session.user.role),
   ]);
-  const d = diffHourly(filterHourlyRows(ra.rows, filters), filterHourlyRows(rb.rows, filters));
+  const userId = Number(session.user.id);
+  const d = diffHourly(
+    filterHourlyRows(await scopeRows(ra.rows, userId), filters),
+    filterHourlyRows(await scopeRows(rb.rows, userId), filters),
+  );
   return NextResponse.json({
     data: { new: sortHourlyRows(d.new, sort), disappeared: sortHourlyRows(d.disappeared, sort) },
     meta: { a: ra.meta, b: rb.meta, new: d.new.length, disappeared: d.disappeared.length },

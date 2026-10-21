@@ -1,17 +1,20 @@
 // Gmail access for hourly reports (§14): list "Hourly Update" mails with an attachment and
-// download one attachment on demand. Same OAuth files as the worker (token.json +
-// credentials.json, read-only, gmail.readonly scope). Server-only.
+// download one attachment on demand. Same Gmail account as the worker: the one connected in
+// /settings/gmail (gmail_account row), else token.json + credentials.json (gmail.readonly).
+// Server-only.
 //
 // The attachment is usually a .rar, sometimes the plain .xlsx — both are processed.
 //
 // HOURLY_GMAIL_MOCK_DIR=<dir> replaces Gmail with the .rar / .xlsx files in that directory (local
 // demo, Playwright smoke test). Tests can inject any source with setHourlySource().
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { gmail as gmailApi, type gmail_v1 } from "@googleapis/gmail";
+import { loadGmailAuth, type GmailAuth } from "@alarm/db";
 import { OAuth2Client } from "google-auth-library";
+import { prisma } from "./db";
 
 export interface HourlyReportInfo {
   gmailId: string;
@@ -49,10 +52,43 @@ const labelSearchName = (name: string) =>
     .toLowerCase()
     .replace(/[\s/&]+/g, "-");
 
-function firstExisting(...paths: (string | undefined)[]): string {
-  const found = paths.find((p) => p && existsSync(p));
-  if (!found) throw new Error(`Gmail OAuth file not found (tried ${paths.filter(Boolean).join(", ")})`);
-  return found;
+function firstExisting(...paths: (string | undefined)[]): string | undefined {
+  return paths.find((p) => p && existsSync(p)) ?? undefined;
+}
+
+/** Where the OAuth files may live: env, Docker secrets mount, repo root (local dev). */
+export function gmailFiles(): { credentialsPath?: string; tokenPath?: string } {
+  const root = path.resolve(process.cwd(), "../..");
+  return {
+    credentialsPath: firstExisting(
+      process.env.GOOGLE_CREDENTIALS_PATH,
+      "/app/secrets/credentials.json",
+      path.join(root, "credentials.json"),
+    ),
+    tokenPath: firstExisting(
+      process.env.GOOGLE_TOKEN_PATH,
+      "/app/secrets/token.json",
+      path.join(root, "token.json"),
+    ),
+  };
+}
+
+/** A Gmail API client for an OAuth client + token. */
+export function gmailFor(auth: Pick<GmailAuth, "client" | "credentials">): gmail_v1.Gmail {
+  const oauth = new OAuth2Client({
+    clientId: auth.client.clientId,
+    clientSecret: auth.client.clientSecret,
+  });
+  oauth.setCredentials(auth.credentials);
+  return gmailApi({ version: "v1", auth: oauth });
+}
+
+let current: { version: string; gmail: gmail_v1.Gmail } | null = null;
+/** Gmail client of the connected account; rebuilt when the stored token changes. */
+async function connectedGmail(): Promise<gmail_v1.Gmail> {
+  const auth = await loadGmailAuth(prisma, gmailFiles());
+  if (current?.version !== auth.version) current = { version: auth.version, gmail: gmailFor(auth) };
+  return current.gmail;
 }
 
 const header = (m: gmail_v1.Schema$Message, name: string) =>
@@ -89,27 +125,6 @@ function toInfo(m: gmail_v1.Schema$Message): HourlyReportInfo | null {
 }
 
 export function createGmailHourlySource(): HourlySource {
-  const root = path.resolve(process.cwd(), "../..");
-  const credentialsPath = firstExisting(
-    process.env.GOOGLE_CREDENTIALS_PATH,
-    "/app/secrets/credentials.json",
-    path.join(root, "credentials.json"),
-  );
-  const tokenPath = firstExisting(
-    process.env.GOOGLE_TOKEN_PATH,
-    "/app/secrets/token.json",
-    path.join(root, "token.json"),
-  );
-  const creds = JSON.parse(readFileSync(credentialsPath, "utf8")) as {
-    installed?: { client_id: string; client_secret: string };
-  };
-  if (!creds.installed) throw new Error("credentials.json is not a Desktop-app OAuth client");
-  const auth = new OAuth2Client({
-    clientId: creds.installed.client_id,
-    clientSecret: creds.installed.client_secret,
-  });
-  auth.setCredentials(JSON.parse(readFileSync(tokenPath, "utf8")));
-  const gmail = gmailApi({ version: "v1", auth });
   const label = labelSearchName(process.env.HOURLY_GMAIL_LABEL || "Hourly Update");
 
   // Message metadata never changes → cache it (bounded).
@@ -118,7 +133,7 @@ export function createGmailHourlySource(): HourlySource {
     if (meta.has(id)) return meta.get(id)!;
     let info: HourlyReportInfo | null = null;
     try {
-      const { data } = await gmail.users.messages.get({
+      const { data } = await (await connectedGmail()).users.messages.get({
         userId: "me",
         id,
         format: "full",
@@ -151,7 +166,7 @@ export function createGmailHourlySource(): HourlySource {
       pageTokens.set(key, tokens);
       // walk forward to the requested page if we have not seen its token yet
       for (let p = tokens.length; p < page; p++) {
-        const { data } = await gmail.users.messages.list({
+        const { data } = await (await connectedGmail()).users.messages.list({
           userId: "me",
           q,
           maxResults: pageSize,
@@ -161,7 +176,7 @@ export function createGmailHourlySource(): HourlySource {
         if (!data.nextPageToken) return { reports: [], hasMore: false };
         tokens[p] = data.nextPageToken;
       }
-      const { data } = await gmail.users.messages.list({
+      const { data } = await (await connectedGmail()).users.messages.list({
         userId: "me",
         q,
         maxResults: pageSize,
@@ -179,7 +194,7 @@ export function createGmailHourlySource(): HourlySource {
 
     async getAttachment(gmailId) {
       // fresh fetch: attachment ids are only guaranteed for the response they came in
-      const { data: m } = await gmail.users.messages
+      const { data: m } = await (await connectedGmail()).users.messages
         .get({ userId: "me", id: gmailId, format: "full" })
         .catch((err) => {
           if ((err as { code?: number }).code === 404) throw new NotFoundError("Report not found");
@@ -187,7 +202,7 @@ export function createGmailHourlySource(): HourlySource {
         });
       const a = attachmentOf(m);
       if (!a) throw new NotFoundError("Message has no attachment");
-      const { data } = await gmail.users.messages.attachments.get({
+      const { data } = await (await connectedGmail()).users.messages.attachments.get({
         userId: "me",
         messageId: gmailId,
         id: a.body!.attachmentId!,

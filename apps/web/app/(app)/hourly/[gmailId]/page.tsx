@@ -43,7 +43,7 @@ type State =
 
 function ResultsView({ gmailId }: { gmailId: string }) {
   const { timeZone, role } = useAppConfig();
-  const canProcess = role === "OPERATOR" || role === "ADMIN";
+  const canProcess = role !== "VIEWER";
   const { params, filters, sort, setMany, setOne, setSort, clear, active } = useHourlyUrl();
   const cols = useColumnPrefs();
   const [state, setState] = useState<State>({ kind: "loading" });

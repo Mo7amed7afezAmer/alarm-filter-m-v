@@ -13,9 +13,9 @@ export const GET = handler(async () => {
   return NextResponse.json(await getDisplayFilter());
 });
 
-/** Replace the hidden lists (admin). Hidden alarms are still stored and matched. */
+/** Replace the hidden lists (super admin). Hidden alarms are still stored and matched. */
 export const PUT = handler(async (req: Request) => {
-  await requireUser("ADMIN");
+  await requireUser("SUPER_ADMIN");
   const body = await parseBody(
     req,
     z.object({
